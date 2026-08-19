@@ -6,9 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "read": "node --experimental-strip-types --no-warnings scripts/read.ts"
   },
   "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@scure/base": "^2.3.0",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/web3.js": "^1.98.4",
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"

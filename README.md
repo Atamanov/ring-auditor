@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ring Auditor
 
-## Getting Started
+A small Next.js page that reads a custom ring through its Ring RPC. It shows
+the two read scopes the RPC authorizes with a signature over the request.
 
-First, run the development server:
+| Read as | Key | Sees |
+| --- | --- | --- |
+| Ring authority | the connected wallet, which must be the ring's authority | every transaction of the ring |
+| Participant, wallet | the connected wallet | the transactions the wallet signed |
+| Participant, viewing key | a recipient's P-256 viewing secret | the outputs encrypted to that key |
+
+`lib/ringRpc.ts` builds the signed request, `lib/signers.ts` holds the two ways
+to sign it. The rest is the page.
+
+## Run
+
+The Ring RPC must allow the browser origin. In the ring repository:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+RING_RPC_ALLOW_ORIGINS=http://localhost:3000 just rpc
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open <http://localhost:3000>, enter the RPC URL and the ring program id, connect
+a wallet, pick a scope and sign. The page signs again for every page of
+results, because the cursor and the time are part of the signed bytes.
 
-## Learn More
+## From the command line
 
-To learn more about Next.js, take a look at the following resources:
+The same request from a Solana keypair file or a viewing secret, useful to
+check an RPC without a wallet:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run read -- --ring <program id> --keypair ~/.config/solana/id.json
+npm run read -- --ring <program id> --keypair <signer.json> --scope participant
+npm run read -- --ring <program id> --secret <viewing secret hex> --scope participant
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Wire format
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`getDecryptedTransactions` takes `{ ring_program_id, cursor?, limit?, auth }`
+where `auth` is `{ scope, reader, timestamp, signature }`. The reader signs
+`"zolana/ring-rpc-read/v1" || scope (0 ring, 1 participant) || ring ||
+timestamp u64 LE || limit u64 LE || cursor`, ed25519 over the bytes for a 32-byte
+reader, ECDSA P-256 over their SHA-256 for a 33-byte SEC1 reader. The server
+accepts a timestamp within one minute.

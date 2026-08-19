@@ -1,26 +1,44 @@
 @import "tailwindcss";
 
+/* Helius palette, dark only. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0e0e11;
+  --surface: #17171c;
+  --line: #3e3e47;
+  --muted: #7d7d8c;
+  --text: #f4f4f5;
+  --accent: #ea4e33;
+  --accent-hover: #ff664d;
+  --accent-ground: #220c08;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-text: var(--text);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ground: var(--accent-ground);
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+.wallet-adapter-button-trigger {
+  background: var(--accent);
+  font-family: var(--font-sans);
+  height: 2.5rem;
+}
+.wallet-adapter-button-trigger:not([disabled]):hover {
+  background: var(--accent-hover);
+}
+.wallet-adapter-modal-wrapper {
+  background: var(--surface);
 }
