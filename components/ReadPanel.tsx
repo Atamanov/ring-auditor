@@ -2,14 +2,14 @@
 
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
+import type { Address } from "@solana/kit";
 import {
-  getDecryptedTransactions,
-  signRead,
-  type DecryptedTransaction,
-  type ReadResponse,
-  type ReadScope,
-  type Signer,
-} from "@/lib/ringRpc";
+  RingRpc,
+  type DecryptedRingTransaction,
+  type DecryptedRingTransactionsPage,
+  type RingReadScope,
+  type RingReadSigner,
+} from "@heliuslabs/zolana/ring";
 import { viewingKeySigner, walletSigner } from "@/lib/signers";
 import type { Target } from "./Connection";
 import { TransactionCard } from "./TransactionCard";
@@ -17,7 +17,7 @@ import { Button, Card, Field } from "./ui";
 
 type Mode = "auditor" | "sender" | "recipient";
 
-const MODES: { id: Mode; scope: ReadScope; label: string; hint: string }[] = [
+const MODES: { id: Mode; scope: RingReadScope; label: string; hint: string }[] = [
   {
     id: "auditor",
     scope: "ring",
@@ -38,35 +38,42 @@ const MODES: { id: Mode; scope: ReadScope; label: string; hint: string }[] = [
   },
 ];
 
-const PAGE = 10;
+const PAGE = 10n;
 
 export function ReadPanel({ target }: { target: Target }) {
   const wallet = useWallet();
   const [mode, setMode] = useState<Mode>("auditor");
   const [secret, setSecret] = useState("");
-  const [items, setItems] = useState<DecryptedTransaction[]>([]);
-  const [skipped, setSkipped] = useState<ReadResponse["value"]["skipped"]>([]);
-  const [cursor, setCursor] = useState<string | null>();
+  const [items, setItems] = useState<DecryptedRingTransaction[]>([]);
+  const [skipped, setSkipped] = useState<DecryptedRingTransactionsPage["skipped"]>([]);
+  const [cursor, setCursor] = useState<Uint8Array>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   const { scope, hint } = MODES.find((m) => m.id === mode)!;
-  const signer = (): Signer | undefined =>
+  const signer = (): RingReadSigner | undefined =>
     mode === "recipient" ? viewingKeySigner(secret) : walletSigner(wallet);
 
-  async function read(from?: string) {
+  async function read(from?: Uint8Array) {
     setBusy(true);
     setError(undefined);
     try {
       const s = signer();
       if (!s) throw new Error("connect a wallet first");
-      const request = await signRead(scope, target.ring, s, from, PAGE);
-      const { value } = await getDecryptedTransactions(target.url, request);
-      setItems(from ? (prev) => [...prev, ...value.items] : value.items);
-      setSkipped(value.skipped);
-      setCursor(value.cursor ?? null);
+      // Signed per request: the cursor and the time are in the attestation.
+      const page = await new RingRpc(target.url).getDecryptedTransactions({
+        ringProgramId: target.ring as Address,
+        scope,
+        signer: s,
+        limit: PAGE,
+        ...(from === undefined ? {} : { cursor: from }),
+      });
+      setItems(from ? (prev) => [...prev, ...page.items] : [...page.items]);
+      setSkipped([...page.skipped]);
+      setCursor(page.cursor);
     } catch (e) {
-      setError((e as Error).message);
+      const details = (e as { details?: { message?: string } }).details;
+      setError(details?.message ?? (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -107,13 +114,13 @@ export function ReadPanel({ target }: { target: Target }) {
         </div>
       </Card>
       {items.map((tx) => (
-        <TransactionCard key={tx.tx_signature} tx={tx} />
+        <TransactionCard key={tx.signature} tx={tx} />
       ))}
       {skipped.length > 0 && (
         <Card title={`Skipped ${skipped.length}`}>
-          {skipped.map((s) => (
-            <p key={s.tx_signature} className="text-xs text-muted">
-              <span className="font-mono">{s.tx_signature}</span> {s.reason}
+          {skipped.map((entry) => (
+            <p key={entry.signature} className="text-xs text-muted">
+              <span className="font-mono">{entry.signature}</span> {entry.reason}
             </p>
           ))}
         </Card>

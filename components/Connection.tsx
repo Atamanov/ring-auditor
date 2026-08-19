@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { health, type Health } from "@/lib/ringRpc";
+import { RingRpc, type RingRpcHealth } from "@heliuslabs/zolana/ring";
 import { Badge, Card, Field, Mono } from "./ui";
 
 export interface Target {
@@ -16,11 +16,12 @@ export function Connection({
   target: Target;
   onChange: (target: Target) => void;
 }) {
-  const [status, setStatus] = useState<Health | string>("probing");
+  const [status, setStatus] = useState<RingRpcHealth | string>("probing");
 
   useEffect(() => {
     let live = true;
-    health(target.url)
+    new RingRpc(target.url)
+      .health()
       .then((h) => live && setStatus(h))
       .catch((e: Error) => live && setStatus(e.message));
     return () => {
@@ -48,7 +49,7 @@ export function Connection({
         <div className="flex flex-wrap items-center gap-2">
           <Badge>{status.mode}</Badge>
           <span className="text-xs text-muted">service key</span>
-          <Mono>{status.service_pubkey}</Mono>
+          <Mono>{status.servicePublicKey}</Mono>
         </div>
       )}
     </Card>

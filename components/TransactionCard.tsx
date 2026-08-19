@@ -1,16 +1,17 @@
-import type { DecryptedTransaction } from "@/lib/ringRpc";
+import type { DecryptedRingTransaction } from "@heliuslabs/zolana/ring";
+import { toBase58, toHex } from "@/lib/format";
 import { Mono } from "./ui";
 
-export function TransactionCard({ tx }: { tx: DecryptedTransaction }) {
+export function TransactionCard({ tx }: { tx: DecryptedRingTransaction }) {
   return (
     <article className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4 text-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <Mono>{tx.tx_signature}</Mono>
-        <span className="text-xs text-muted tabular-nums">slot {tx.slot}</span>
+        <Mono>{tx.signature}</Mono>
+        <span className="text-xs text-muted tabular-nums">slot {tx.slot.toString()}</span>
       </header>
       <Row label="signers">
-        {tx.signers.map((s) => (
-          <Mono key={s}>{s}</Mono>
+        {tx.signers.map((signer) => (
+          <Mono key={signer}>{signer}</Mono>
         ))}
       </Row>
       <table className="w-full text-xs">
@@ -23,29 +24,29 @@ export function TransactionCard({ tx }: { tx: DecryptedTransaction }) {
           </tr>
         </thead>
         <tbody>
-          {tx.outputs.map((o) => (
-            <tr key={o.slot_index} className="border-t border-line">
-              <td className="py-1 tabular-nums">{o.slot_index}</td>
+          {tx.outputs.map((output) => (
+            <tr key={output.slotIndex} className="border-t border-line">
+              <td className="py-1 tabular-nums">{output.slotIndex}</td>
               <td className="py-1">
-                <Mono>{o.recipient_viewing_pk}</Mono>
+                <Mono>{toHex(output.recipientViewingPublicKey)}</Mono>
               </td>
               <td className="py-1">
-                <Mono>{o.asset}</Mono>
+                <Mono>{output.asset}</Mono>
               </td>
-              <td className="py-1 text-right tabular-nums">{o.amount}</td>
+              <td className="py-1 text-right tabular-nums">{output.amount.toString()}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {tx.undecryptable_slots.length > 0 && (
+      {tx.undecryptableSlots.length > 0 && (
         <Row label="undecryptable">
-          <span className="tabular-nums">{tx.undecryptable_slots.join(", ")}</span>
+          <span className="tabular-nums">{tx.undecryptableSlots.join(", ")}</span>
         </Row>
       )}
       {tx.nullifiers.length > 0 && (
         <Row label="nullifiers">
-          {tx.nullifiers.map((n) => (
-            <Mono key={n}>{n}</Mono>
+          {tx.nullifiers.map((nullifier) => (
+            <Mono key={toBase58(nullifier)}>{toBase58(nullifier)}</Mono>
           ))}
         </Row>
       )}

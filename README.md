@@ -9,8 +9,9 @@ the two read scopes the RPC authorizes with a signature over the request.
 | Participant, wallet | the connected wallet | the transactions the wallet signed |
 | Participant, viewing key | a recipient's P-256 viewing secret | the outputs encrypted to that key |
 
-`lib/ringRpc.ts` builds the signed request, `lib/signers.ts` holds the two ways
-to sign it. The rest is the page.
+The wire work lives in `@heliuslabs/zolana/ring` (`RingRpc`, the attestation
+layout, the P-256 reader). `lib/signers.ts` only adapts the browser wallet and
+a pasted viewing secret to the SDK's `RingReadSigner`. The rest is the page.
 
 ## Run
 
@@ -44,9 +45,12 @@ npm run read -- --ring <program id> --secret <viewing secret hex> --scope partic
 
 ## Wire format
 
-`getDecryptedTransactions` takes `{ ring_program_id, cursor?, limit?, auth }`
-where `auth` is `{ scope, reader, timestamp, signature }`. The reader signs
-`"zolana/ring-rpc-read/v1" || scope (0 ring, 1 participant) || ring ||
-timestamp u64 LE || limit u64 LE || cursor`, ed25519 over the bytes for a 32-byte
-reader, ECDSA P-256 over their SHA-256 for a 33-byte SEC1 reader. The server
-accepts a timestamp within one minute.
+The request layout and the signed attestation are documented on
+`ringReadAttestation` in `@heliuslabs/zolana/ring`, whose bytes are pinned
+against the Rust server by the SDK's tests. The page signs again for every
+request because the cursor and the time are both part of the signature.
+
+The SDK is consumed as a `file:` dependency on the zolana checkout next to
+this repository (`npm run build:ts` there refreshes it). The page never
+hashes, so the SDK's Poseidon WASM is stubbed out of the bundle in
+`next.config.ts`.
