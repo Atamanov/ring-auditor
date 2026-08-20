@@ -1,32 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { loadRings, saveRings, type RingSelection } from "@/lib/config";
 import { loadPasskeys, savePasskeys, type StoredPasskey } from "@/lib/passkeys";
-import { Connection, type Target } from "./Connection";
+import { Connection } from "./Connection";
 import { Passkeys } from "./Passkeys";
 import { ReadPanel } from "./ReadPanel";
 
-const STORAGE = "ring-auditor.target";
-// Build-time defaults for a deployment (`.env.local`), editable on the page.
-const DEFAULT: Target = {
-  url: process.env.NEXT_PUBLIC_RING_RPC_URL ?? "http://127.0.0.1:9485",
-  ring: process.env.NEXT_PUBLIC_RING_PROGRAM_ID ?? "",
-  solanaRpc: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "http://127.0.0.1:9599",
-};
-
-// Client only, so the saved target can seed the state without a server render
-// that disagrees with it.
+// Client only, so the saved selection can seed the state without a server
+// render that disagrees with it.
 export default function Auditor() {
-  const [target, setTarget] = useState<Target>(() => ({
-    ...DEFAULT,
-    ...JSON.parse(localStorage.getItem(STORAGE) ?? "{}"),
-  }));
-
+  const [selection, setSelection] = useState<RingSelection>(loadRings);
   const [passkeys, setPasskeys] = useState<StoredPasskey[]>(loadPasskeys);
 
-  function update(next: Target) {
-    setTarget(next);
-    localStorage.setItem(STORAGE, JSON.stringify(next));
+  function updateSelection(next: RingSelection) {
+    setSelection(next);
+    saveRings(next);
   }
 
   function updatePasskeys(next: StoredPasskey[]) {
@@ -36,9 +25,9 @@ export default function Auditor() {
 
   return (
     <>
-      <Connection target={target} onChange={update} />
-      <Passkeys target={target} passkeys={passkeys} onChange={updatePasskeys} />
-      <ReadPanel target={target} passkeys={passkeys} />
+      <Connection selection={selection} onChange={updateSelection} />
+      <Passkeys ring={selection.selected} passkeys={passkeys} onChange={updatePasskeys} />
+      <ReadPanel ring={selection.selected} passkeys={passkeys} />
     </>
   );
 }

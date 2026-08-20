@@ -16,8 +16,13 @@ before it signs anything.
 The wire work lives in `@heliuslabs/zolana/ring` (`RingRpc`, the attestation
 layout, the P-256 reader). `lib/signers.ts` adapts the browser wallet to the
 SDK's `RingReadSigner`, and derives the wallet's viewing key with one
-`signMessage` over the SDK's derivation message, the same key the SDK wallet
-derives. The key lives in page state only. The rest is the page.
+`signMessage` over the bare derivation payload `TSPP/derive/v1` (browser
+wallets refuse the off-chain envelope). The key lives in page state only.
+
+The Ring card lists named rings, `+` adds one, and **Test transact** runs two
+ring deposits and one audited transfer from the connected wallet, signed in
+the wallet, so the Participant view has the wallet's own transfer to show.
+Service URLs are deployment settings in `.env.local` (see `.env.example`).
 
 ## Delegating reads
 
@@ -65,8 +70,8 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>, enter the RPC URL, the ring program id and the
-Solana RPC URL, connect a wallet, pick a scope and sign. The page signs again for every page of
+Copy `.env.example` to `.env.local` and set the ring, then open
+<http://localhost:3000>, connect a wallet, pick a scope and sign. The page signs again for every page of
 results, because the cursor and the time are part of the signed bytes.
 
 ## From the command line
@@ -89,6 +94,4 @@ against the Rust server by the SDK's tests. The page signs again for every
 request because the cursor and the time are both part of the signature.
 
 The SDK is consumed as a `file:` dependency on the zolana checkout next to
-this repository (`npm run build:ts` there refreshes it). The page never
-hashes, so the SDK's Poseidon WASM is stubbed out of the bundle in
-`next.config.ts`.
+this repository (`npm run build:ts` there refreshes it).

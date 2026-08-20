@@ -6,9 +6,14 @@ const nextConfig: NextConfig = {
   // must cover both checkouts.
   turbopack: {
     root: path.join(__dirname, ".."),
-    resolveAlias: {
-      "@lightprotocol/hasher.rs": "./lib/hasher-stub.ts",
-    },
+    // The hasher's browser build inlines its WASM but keeps a `new URL(..)`
+    // fallback that the bundler resolves against the wrong directory.
+    resolveAlias: Object.fromEntries(
+      ["hasher_wasm_simd_bg.wasm", "light_wasm_hasher_bg.wasm"].map((file) => [
+        file,
+        `../zolana/node_modules/@lightprotocol/hasher.rs/dist/${file}`,
+      ]),
+    ),
   },
 };
 

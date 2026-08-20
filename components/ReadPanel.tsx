@@ -12,7 +12,7 @@ import {
 import { passkeyPublicKey, passkeySigner, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
 import { derivedViewingKeySigner, walletSigner } from "@/lib/signers";
-import type { Target } from "./Connection";
+import { RING_RPC_URL, SOLANA_RPC_URL } from "@/lib/config";
 import { TransactionCard } from "./TransactionCard";
 import { Badge, Button, Card } from "./ui";
 
@@ -46,7 +46,7 @@ function errorMessage(e: unknown): string {
   return details?.message ?? (e as Error).message;
 }
 
-export function ReadPanel({ target, passkeys }: { target: Target; passkeys: StoredPasskey[] }) {
+export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPasskey[] }) {
   const wallet = useWallet();
   const [mode, setMode] = useState<Mode>("auditor");
   // Auditor mode signs with the wallet or one of the stored passkeys.
@@ -67,20 +67,20 @@ export function ReadPanel({ target, passkeys }: { target: Target; passkeys: Stor
   );
 
   useEffect(() => {
-    if (!readerKey || !target.ring) return;
+    if (!readerKey || !ring) return;
     let live = true;
-    ringRole(target.solanaRpc, target.ring as Address, readerKey)
+    ringRole(SOLANA_RPC_URL, ring as Address, readerKey)
       .then((r) => live && setRole(r))
       .catch((e: unknown) => live && setRole(errorMessage(e)));
     return () => {
       live = false;
     };
-  }, [target.solanaRpc, target.ring, readerKey, reads]);
+  }, [ring, readerKey, reads]);
 
   // Signed per request: the cursor and the time are in the attestation.
   async function page(view: View, from?: Uint8Array): Promise<View> {
-    const result = await new RingRpc(target.url).getDecryptedTransactions({
-      ringProgramId: target.ring as Address,
+    const result = await new RingRpc(RING_RPC_URL).getDecryptedTransactions({
+      ringProgramId: ring as Address,
       scope: mode === "auditor" ? "ring" : "participant",
       signer: view.signer,
       limit: PAGE,
@@ -178,14 +178,14 @@ export function ReadPanel({ target, passkeys }: { target: Target; passkeys: Stor
             </select>
           </label>
         )}
-        {role && readerKey && target.ring && (
+        {role && readerKey && ring && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">{passkey ? "passkey is" : "wallet is"}</span>
             <Badge>{role}</Badge>
           </div>
         )}
         <div className="flex items-center gap-3">
-          <Button onClick={read} disabled={busy || !target.ring || (!passkey && !walletAddress)}>
+          <Button onClick={read} disabled={busy || !ring || (!passkey && !walletAddress)}>
             {busy ? "Signing…" : "Sign and read"}
           </Button>
           {error && <span className="text-sm text-accent-hover">{error}</span>}

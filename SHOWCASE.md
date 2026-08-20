@@ -10,7 +10,12 @@ cd ~/rings/demo && RING_RPC_ALLOW_ORIGINS=http://localhost:3000 just rpc   # rin
 cd ~/Projects/Helius/dev/ring-auditor && npm run dev                          # page on :3000
 ```
 
-`.env.local` already points the page at the ring. Phantom on devnet.
+`.env.local` already points the page at the ring (name "Rings.fun"). Phantom on devnet.
+
+## 0. Something to read
+
+Connect any wallet with devnet SOL, **Test transact**: two deposits and one
+audited transfer signed in the wallet. About half a minute.
 
 ## 1. Auditor, wallet
 
@@ -20,11 +25,13 @@ Connect the authority wallet, "Ring auditor", Sign and read. Badge says
 ## 2. Auditor, passkey
 
 Passkeys card, label, Create passkey. Pick Touch ID or the YubiKey in the
-browser sheet. The key shows as hex, badge "participant only".
+browser sheet. Badge "participant only". **Request grant** opens the text to
+send the operator (key and command).
 
 Grant it, either way:
 
-- page: the authority wallet is connected, click Grant next to the key
+- page: the authority wallet is connected, click Grant next to the key (or
+  paste a visitor's key into the field)
 - terminal: `cd ~/rings/demo && just grant-reader <hex>`
 
 Badge flips to "delegated reader". "Ring auditor", sign with `passkey · <label>`,

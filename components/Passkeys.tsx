@@ -13,8 +13,8 @@ import {
 import { sendWithWallet } from "@/lib/chain";
 import { passkeyPublicKey, registerPasskey, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
-import type { Target } from "./Connection";
-import { Badge, Button, Card, Field, Mono } from "./ui";
+import { SOLANA_RPC_URL } from "@/lib/config";
+import { Badge, Button, Card, Field, Modal, Mono } from "./ui";
 
 function errorMessage(e: unknown): string {
   const details = (e as { details?: { message?: string } }).details;
@@ -23,12 +23,16 @@ function errorMessage(e: unknown): string {
 
 // Passkeys this browser registered, and the authority's grant controls. A key
 // pasted from another machine can be granted here too, the list stays local.
+function short(hex: string): string {
+  return `${hex.slice(0, 6)}…${hex.slice(-6)}`;
+}
+
 export function Passkeys({
-  target,
+  ring: ringId,
   passkeys,
   onChange,
 }: {
-  target: Target;
+  ring: string;
   passkeys: StoredPasskey[];
   onChange: (passkeys: StoredPasskey[]) => void;
 }) {
@@ -39,30 +43,31 @@ export function Passkeys({
   const [walletRole, setWalletRole] = useState<RingRole>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [request, setRequest] = useState<StoredPasskey>();
 
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
-  const ring = target.ring as Address;
+  const ring = ringId as Address;
   const keys = passkeys.map((p) => readerKeyToString(passkeyPublicKey(p))).join(",");
 
   useEffect(() => {
-    if (!target.ring) return;
+    if (!ringId) return;
     let live = true;
     const readers: ReaderKey[] = keys ? keys.split(",").map(parseReaderKey) : [];
-    Promise.all(readers.map((reader) => ringRole(target.solanaRpc, ring, reader)))
+    Promise.all(readers.map((reader) => ringRole(SOLANA_RPC_URL, ring, reader)))
       .then((found) => {
         if (!live) return;
         setRoles(Object.fromEntries(readers.map((r, i) => [readerKeyToString(r), found[i]!])));
       })
       .catch(() => live && setRoles({}));
     if (walletAddress) {
-      ringRole(target.solanaRpc, ring, walletAddress)
+      ringRole(SOLANA_RPC_URL, ring, walletAddress)
         .then((r) => live && setWalletRole(r))
         .catch(() => live && setWalletRole(undefined));
     }
     return () => {
       live = false;
     };
-  }, [target.solanaRpc, target.ring, ring, keys, walletAddress, busy]);
+  }, [ringId, ring, keys, walletAddress, busy]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -94,7 +99,7 @@ export function Passkeys({
             rentRecipient: authority,
           })
         : await grantReaderInstruction({ ringProgramId: ring, payer: authority, authority, reader });
-      await sendWithWallet(wallet, target.solanaRpc, instruction);
+      await sendWithWallet(wallet, SOLANA_RPC_URL, instruction);
       setPasted("");
     });
 
@@ -105,7 +110,7 @@ export function Passkeys({
       <div className="flex items-center gap-2">
         <Badge>{roles[readerKeyToString(reader)] ?? "…"}</Badge>
         {isAuthority && (
-          <Button onClick={() => grant(reader, granted)} disabled={busy || !target.ring}>
+          <Button onClick={() => grant(reader, granted)} disabled={busy || !ringId}>
             {granted ? "Revoke" : "Grant"}
           </Button>
         )}
@@ -123,16 +128,13 @@ export function Passkeys({
         <div key={p.credentialId} className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-col">
             <span className="text-sm">{p.label}</span>
-            <Mono>{p.publicKey}</Mono>
+            <Mono>{short(p.publicKey)}</Mono>
           </div>
           <div className="flex items-center gap-2">
             {controls(passkeyPublicKey(p))}
-            <button
-              onClick={() => navigator.clipboard.writeText(p.publicKey)}
-              className="text-xs text-muted hover:text-text"
-            >
-              copy
-            </button>
+            {!isAuthority && roles[p.publicKey] !== "delegated reader" && (
+              <Button onClick={() => setRequest(p)}>Request grant</Button>
+            )}
             <button
               onClick={() => onChange(passkeys.filter((q) => q.credentialId !== p.credentialId))}
               className="text-xs text-muted hover:text-text"
@@ -164,6 +166,41 @@ export function Passkeys({
         </div>
       )}
       {error && <span className="text-sm text-accent-hover">{error}</span>}
+      {request && (
+        <Modal title={`Grant for ${request.label}`} onClose={() => setRequest(undefined)}>
+          <p className="text-sm">
+            Send this public key to the ring operator. The ring authority grants it on chain, then
+            the passkey reads the whole ring. The key is public, the passkey never leaves this
+            device.
+          </p>
+          <Copyable label="Public key (P-256, hex)" value={request.publicKey} />
+          <Copyable
+            label="What the operator runs in the ring repository"
+            value={`just grant-reader ${request.publicKey}`}
+          />
+          <p className="text-xs text-muted">
+            An operator with the authority wallet can also open this page and press Grant next to
+            the pasted key. Once granted, Ring auditor → sign with this passkey.
+          </p>
+        </Modal>
+      )}
     </Card>
+  );
+}
+
+function Copyable({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted uppercase tracking-wide text-xs">{label}</span>
+      <div className="flex items-center gap-2 rounded border border-line bg-bg px-3 py-2">
+        <Mono>{value}</Mono>
+        <button
+          onClick={() => navigator.clipboard.writeText(value)}
+          className="shrink-0 text-xs text-muted hover:text-text"
+        >
+          copy
+        </button>
+      </div>
+    </div>
   );
 }
