@@ -1,5 +1,5 @@
 import { hex } from "@scure/base";
-import { ViewingKey, ed25519DerivationMessage, type Bytes32 } from "@heliuslabs/zolana/keypair";
+import { ViewingKey, ed25519DerivationPayload, type Bytes32 } from "@heliuslabs/zolana/keypair";
 import { viewingKeyReader, type RingReadSigner } from "@heliuslabs/zolana/ring";
 
 export interface MessageWallet {
@@ -16,16 +16,16 @@ export function walletSigner(wallet: MessageWallet): RingReadSigner | undefined 
   return { reader: publicKey.toBytes(), sign: signMessage };
 }
 
-// The wallet's shielded viewing key, derived the way the SDK wallet derives it:
-// one signature over the derivation message. The signature is deterministic,
-// so the key is stable across sessions, and nothing is persisted.
+// The wallet's shielded viewing key: one signature over the bare derivation
+// payload, the form browser wallets accept (Phantom refuses the off-chain
+// envelope). ed25519 signatures are deterministic, so the key is stable across
+// sessions, and nothing is persisted.
 export async function derivedViewingKeySigner(
   wallet: MessageWallet,
 ): Promise<RingReadSigner | undefined> {
   const { publicKey, signMessage } = wallet;
   if (!publicKey || !signMessage) return undefined;
-  const message = ed25519DerivationMessage(publicKey.toBytes() as Bytes32);
-  return viewingKeyReader(ViewingKey.fromDerivationSeed(await signMessage(message)));
+  return viewingKeyReader(ViewingKey.fromDerivationSeed(await signMessage(ed25519DerivationPayload())));
 }
 
 // A recipient's P-256 viewing secret (32 bytes as hex) sees its own outputs.

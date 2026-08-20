@@ -55,6 +55,8 @@ export function ReadPanel({ target, passkeys }: { target: Target; passkeys: Stor
   const [role, setRole] = useState<RingRole | string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  // Bumped after every read so the badge follows a grant or revoke made meanwhile.
+  const [reads, setReads] = useState(0);
 
   const { hint } = MODES.find((m) => m.id === mode)!;
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
@@ -73,7 +75,7 @@ export function ReadPanel({ target, passkeys }: { target: Target; passkeys: Stor
     return () => {
       live = false;
     };
-  }, [target.solanaRpc, target.ring, readerKey]);
+  }, [target.solanaRpc, target.ring, readerKey, reads]);
 
   // Signed per request: the cursor and the time are in the attestation.
   async function page(view: View, from?: Uint8Array): Promise<View> {
@@ -118,9 +120,11 @@ export function ReadPanel({ target, passkeys }: { target: Target; passkeys: Stor
       for (const view of fresh) loaded.push(await page(view));
       setViews(loaded);
     } catch (e) {
+      setViews([]);
       setError(errorMessage(e));
     } finally {
       setBusy(false);
+      setReads((n) => n + 1);
     }
   }
 

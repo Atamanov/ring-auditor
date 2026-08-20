@@ -7,10 +7,11 @@ import { Passkeys } from "./Passkeys";
 import { ReadPanel } from "./ReadPanel";
 
 const STORAGE = "ring-auditor.target";
+// Build-time defaults for a deployment (`.env.local`), editable on the page.
 const DEFAULT: Target = {
-  url: "http://127.0.0.1:9485",
-  ring: "",
-  solanaRpc: "http://127.0.0.1:9599",
+  url: process.env.NEXT_PUBLIC_RING_RPC_URL ?? "http://127.0.0.1:9485",
+  ring: process.env.NEXT_PUBLIC_RING_PROGRAM_ID ?? "",
+  solanaRpc: process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "http://127.0.0.1:9599",
 };
 
 // Client only, so the saved target can seed the state without a server render
