@@ -19,7 +19,7 @@ Phantom on devnet.
 Connect any wallet with devnet SOL. **Refresh** derives the wallet's shielded
 keys (one signature, once per session) and shows its balance on the ring.
 **Deposit** shields SOL (one signature), **Transfer** moves it inside the ring
-with an audit proof (one signature, about twenty seconds).
+with an audit proof from the prover (one signature, about twenty seconds).
 
 ## 1. Auditor, wallet
 
@@ -48,9 +48,9 @@ Revoke on the page or `just revoke-reader <hex>`. Sign and read again:
 
 ## 4. Participant
 
-"Participant", Sign and read. Two wallet prompts, the derivation text
-`TSPP/derive/v1` and the read. "Sent" lists what the wallet signed, "Received"
-what its derived viewing key can open.
+"Participant", Sync and read. No RPC call, one wallet prompt for the derivation
+text `TSPP/derive/v1` unless the session already has it. "Sent" lists the
+wallet's outbound transfers, "Received" its notes, from its local wallet sync.
 
 ## Client test
 

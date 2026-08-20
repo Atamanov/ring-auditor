@@ -10,7 +10,6 @@ import {
   type RingRpcHealth,
 } from "@heliuslabs/zolana/ring";
 
-// What the ring RPC grants a key on the ring scope, read from chain.
 export type RingRole = "authority" | "delegated reader" | "participant only";
 
 export async function ringRole(

@@ -203,7 +203,7 @@ export function Connection({
         </Button>
         <Button
           onClick={() =>
-            act("transfer", () => shielded.transfer(selectedRing(selection)!, rpcUrl, lamports()))
+            act("transfer", () => shielded.transfer(selectedRing(selection)!, lamports()))
           }
           disabled={!canAct}
           title="Audited transfer inside the ring to a fresh recipient"

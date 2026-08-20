@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { Address } from "@solana/kit";
 import {
   RingRpc,
-  type DecryptedRingTransaction,
   type DecryptedRingTransactionsPage,
   type RingReadSigner,
 } from "@heliuslabs/zolana/ring";
@@ -15,10 +14,11 @@ import {
   type StoredPasskey,
 } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
+import { participantViews } from "@/lib/participant";
 import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
 import { SOLANA_RPC_URL } from "@/lib/config";
-import { TransactionCard } from "./TransactionCard";
+import { TransactionCard, type ShownTransaction } from "./TransactionCard";
 import { toBase58, toHex } from "@/lib/format";
 import { GrantRequest } from "./GrantRequest";
 import { Badge, Button, Card, Field } from "./ui";
@@ -34,7 +34,7 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
   {
     id: "participant",
     label: "Participant",
-    hint: "The wallet sees the transactions it signed, and through its derived viewing key the outputs sent to it.",
+    hint: "The wallet's own view from its local sync, the outputs it received and the transfers it sent. The ring RPC is not called.",
   },
 ];
 
@@ -44,15 +44,15 @@ const PAGE = 10;
 
 interface View {
   title: string;
-  signer: RingReadSigner;
-  items: DecryptedRingTransaction[];
+  signer?: RingReadSigner;
+  items: ShownTransaction[];
   skipped: DecryptedRingTransactionsPage["skipped"];
   cursor?: Uint8Array;
   page: number;
 }
 
 // Every field of a transaction as searchable text, lowercased once per row.
-function searchText(tx: DecryptedRingTransaction): string {
+function searchText(tx: ShownTransaction): string {
   return [
     tx.signature,
     tx.slot.toString(),
@@ -97,7 +97,7 @@ export function ReadPanel({
   const [busy, setBusy] = useState(false);
   // Bumped after every read so the badge follows a grant or revoke made meanwhile.
   const [reads, setReads] = useState(0);
-  // Who signed the page on screen, set on success, cleared when a new read starts.
+  // Where the page on screen came from, set on success, cleared when a new read starts.
   const [fetchedBy, setFetchedBy] = useState<string>();
   const [query, setQuery] = useState("");
 
@@ -124,10 +124,9 @@ export function ReadPanel({
   }, [ring, rpcUrl, readerKey, reads]);
 
   // Signed per request: the cursor and the time are in the attestation.
-  async function page(view: View, from?: Uint8Array): Promise<View> {
+  async function page(view: View & { signer: RingReadSigner }, from?: Uint8Array): Promise<View> {
     const result = await new RingRpc(rpcUrl).getDecryptedTransactions({
       ringProgramId: ring as Address,
-      scope: mode === "auditor" ? "ring" : "participant",
       signer: view.signer,
       limit: FETCH,
       ...(from === undefined ? {} : { cursor: from }),
@@ -160,34 +159,28 @@ export function ReadPanel({
             page: 0,
           }),
         ]);
-        setFetchedBy(signedBy);
+        setFetchedBy(`signed by ${signedBy}`);
+        return;
+      }
+      if (mode === "participant") {
+        if (!walletAddress) throw new Error("connect a wallet first");
+        const synced = await shielded.sync();
+        setViews(
+          participantViews(synced, ring as Address, walletAddress).map((view) => ({
+            ...view,
+            skipped: [],
+            page: 0,
+          })),
+        );
+        setFetchedBy(`from local wallet sync at block ${synced.slot}`);
         return;
       }
       const sender = walletSigner(wallet);
       if (!sender) throw new Error("connect a wallet first");
-      const fresh: View[] =
-        mode === "auditor"
-          ? [{ title: "Ring", signer: sender, items: [], skipped: [], page: 0 }]
-          : [
-              {
-                title: "Sent",
-                signer: sender,
-                items: [],
-                skipped: [],
-                page: 0,
-              },
-              {
-                title: "Received",
-                signer: await shielded.viewingKeySigner(),
-                items: [],
-                skipped: [],
-                page: 0,
-              },
-            ];
-      const loaded: View[] = [];
-      for (const view of fresh) loaded.push(await page(view));
-      setViews(loaded);
-      setFetchedBy(signedBy);
+      setViews([
+        await page({ title: "Ring", signer: sender, items: [], skipped: [], page: 0 }),
+      ]);
+      setFetchedBy(`signed by ${signedBy}`);
     } catch (e) {
       setViews([]);
       setError(errorMessage(e, rpcUrl));
@@ -202,7 +195,8 @@ export function ReadPanel({
     setError(undefined);
     try {
       const view = views[index];
-      const next = await page(view, view.cursor);
+      if (!view.signer) return;
+      const next = await page({ ...view, signer: view.signer }, view.cursor);
       setViews((prev) => prev.map((v, i) => (i === index ? next : v)));
     } catch (e) {
       setError(errorMessage(e, rpcUrl));
@@ -266,12 +260,12 @@ export function ReadPanel({
             onClick={read}
             disabled={busy || !ring || (!passkey && !walletAddress)}
           >
-            {busy ? "Signing…" : "Sign and read"}
+            {mode === "participant" ? (busy ? "Syncing…" : "Sync and read") : busy ? "Signing…" : "Sign and read"}
           </Button>
           {error && <span className="text-sm text-accent-hover">{error}</span>}
           {fetchedBy && !error && (
             <span className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
-              fetched · signed by {fetchedBy}
+              fetched · {fetchedBy}
             </span>
           )}
         </div>
@@ -344,7 +338,7 @@ export function ReadPanel({
                 ))}
               </Card>
             )}
-            {view.cursor && (
+            {view.cursor && view.signer && (
               <Button onClick={() => older(index)} disabled={busy}>
                 Load older (sign)
               </Button>

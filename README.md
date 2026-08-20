@@ -1,13 +1,14 @@
 # Ring Auditor
 
-A small Next.js page that reads a custom ring through its Ring RPC. It shows
-the two read scopes the RPC authorizes with a signature over the request.
+A small Next.js page that reads a custom ring through its Ring RPC, which
+accepts a read from the ring authority or a granted reader, signed over the
+request, and shows a participant its own view from a local wallet sync.
 
 | Read as | Key | Sees |
 | --- | --- | --- |
 | Ring auditor | the connected wallet, the ring's authority or a reader it granted | every transaction of the ring |
 | Ring auditor, passkey | a passkey (Touch ID, YubiKey) the authority granted | every transaction of the ring |
-| Participant | the connected wallet, plus the viewing key derived from it | the transactions the wallet signed, and the outputs sent to it |
+| Participant | the shielded keys derived from the connected wallet, no RPC call | the outputs it received and the transfers it sent, from its local wallet sync |
 
 The page reads the ring config and the wallet's reader record from the Solana
 RPC and shows the wallet's role (authority, delegated reader, participant only)
@@ -15,9 +16,9 @@ before it signs anything.
 
 The wire work lives in `@heliuslabs/zolana/ring` (`RingRpc`, the attestation
 layout, the P-256 reader). `lib/signers.ts` adapts the browser wallet to the
-SDK's `RingReadSigner`, and derives the wallet's viewing key with one
-`signMessage` over the bare derivation payload `TSPP/derive/v1` (browser
-wallets refuse the off-chain envelope). The key lives in page state only.
+SDK's `RingReadSigner`. `lib/shielded.tsx` derives the wallet's shielded keys
+with one `signMessage` over the bare derivation payload `TSPP/derive/v1`
+(browser wallets refuse the off-chain envelope). The keys live in page state only.
 
 The Ring card lists named rings, `+` adds one (name, program id, its RPC),
 `×` removes the selected one, and shows the wallet's balance
@@ -31,7 +32,7 @@ Service URLs are deployment settings in `.env.local` (see `.env.example`).
 
 ## Delegating reads
 
-The authority grants ring-scope reads to another key on chain, so the authority
+The authority grants ring reads to another key on chain, so the authority
 key never has to sign in a browser and a Squads-held authority can grant by
 proposal. Either from the ring repository, with a base58 wallet key or the hex
 key of a passkey:
@@ -76,19 +77,16 @@ npm run dev
 ```
 
 Copy `.env.example` to `.env.local` and set the ring, then open
-<http://localhost:3000>, connect a wallet, pick a scope and sign. The page signs again for every page of
+<http://localhost:3000>, connect a wallet, pick a mode and sign. The page signs again for every page of
 results, because the cursor and the time are part of the signed bytes.
 
 ## From the command line
 
-The same request from a Solana keypair file or a viewing secret, useful to
-check an RPC without a wallet. The `--secret` form is the only place a raw
-viewing secret is accepted:
+The same request from a Solana keypair file, useful to check an RPC without a
+wallet:
 
 ```bash
 npm run read -- --ring <program id> --keypair ~/.config/solana/id.json
-npm run read -- --ring <program id> --keypair <signer.json> --scope participant
-npm run read -- --ring <program id> --secret <viewing secret hex> --scope participant
 ```
 
 ## Wire format

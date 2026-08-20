@@ -13,16 +13,20 @@ import {
 } from "@heliuslabs/zolana";
 import { ShieldedKeypair, SigningKey, ed25519DerivationPayload, type Bytes32 } from "@heliuslabs/zolana/keypair";
 import {
-  RingRpc,
   buildRingDepositTransaction,
   buildRingLookupTableTransaction,
   buildRingTransferTransaction,
-  viewingKeyReader,
-  type RingReadSigner,
 } from "@heliuslabs/zolana/ring";
 import { INDEXER_URL, PROVER_URL, SOLANA_RPC_URL, TREE, type Ring } from "./config";
 
 type ZolanaClient = Awaited<ReturnType<typeof createZolanaClient>>;
+
+/** The wallet's notes and history as of `slot`, after a full sync. */
+export interface Synced {
+  readonly wallet: Wallet;
+  readonly slot: bigint;
+  readonly viewingPublicKey: Uint8Array;
+}
 
 // The wallet's shielded side, derived once per connection from its signature
 // over the derivation payload and kept in memory: the nullifier and viewing
@@ -33,10 +37,10 @@ export interface Shielded {
   readonly balance?: bigint;
   /** Derives the keys when needed, then returns them. One wallet prompt, once. */
   derive(): Promise<LocalWalletAuthority>;
-  viewingKeySigner(): Promise<RingReadSigner>;
+  sync(): Promise<Synced>;
   refresh(ring: Address): Promise<bigint>;
   deposit(ring: Address, lamports: bigint): Promise<string>;
-  transfer(ring: Ring, rpcUrl: string, lamports: bigint): Promise<string>;
+  transfer(ring: Ring, lamports: bigint): Promise<string>;
 }
 
 const ShieldedContext = createContext<Shielded | undefined>(undefined);
@@ -115,17 +119,23 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     [walletAddress],
   );
 
+  const sync = useCallback(async (): Promise<Synced> => {
+    const auth = await derive();
+    const c = await client();
+    const shielded = await shieldedWallet(auth);
+    const slot = BigInt(await c.solanaRpc.getSlot().send());
+    await syncWallet({
+      client: c,
+      wallet: shielded,
+      authority: auth,
+      config: { requireSlot: slot },
+    });
+    return { wallet: shielded, slot, viewingPublicKey: shielded.identity.viewingPublicKey.toBytes() };
+  }, [client, derive, shieldedWallet]);
+
   const refresh = useCallback(
     async (ring: Address) => {
-      const auth = await derive();
-      const c = await client();
-      const shielded = await shieldedWallet(auth);
-      await syncWallet({
-        client: c,
-        wallet: shielded,
-        authority: auth,
-        config: { requireSlot: BigInt(await c.solanaRpc.getSlot().send()) },
-      });
+      const { wallet: shielded } = await sync();
       const total = shielded
         .utxos()
         .filter((e) => !e.spent && e.utxo.asset === SOL_MINT && e.utxo.zoneProgramId === ring)
@@ -133,7 +143,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
       setBalance(total);
       return total;
     },
-    [client, derive, setBalance, shieldedWallet],
+    [setBalance, sync],
   );
 
   const deposit = useCallback(
@@ -157,7 +167,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
   );
 
   const transfer = useCallback(
-    async (ringEntry: Ring, rpcUrl: string, lamports: bigint) => {
+    async (ringEntry: Ring, lamports: bigint) => {
       const ring = ringEntry.id as Address;
       const auth = await derive();
       const c = await client();
@@ -170,7 +180,6 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
         wallet,
         await buildRingTransferTransaction({
           client: c,
-          ringRpc: new RingRpc(rpcUrl),
           ringProgramId: ring,
           wallet: shielded,
           authority: auth,
@@ -186,14 +195,9 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     [client, derive, refresh, shieldedWallet, wallet, walletAddress],
   );
 
-  const viewingKeySigner = useCallback(async () => {
-    const [viewingKey] = await (await derive()).viewingKeys();
-    return viewingKeyReader(viewingKey!);
-  }, [derive]);
-
   const value = useMemo<Shielded>(
-    () => ({ authority, balance, derive, viewingKeySigner, refresh, deposit, transfer }),
-    [authority, balance, derive, viewingKeySigner, refresh, deposit, transfer],
+    () => ({ authority, balance, derive, sync, refresh, deposit, transfer }),
+    [authority, balance, derive, sync, refresh, deposit, transfer],
   );
   return <ShieldedContext.Provider value={value}>{children}</ShieldedContext.Provider>;
 }

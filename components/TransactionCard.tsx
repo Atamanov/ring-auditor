@@ -1,9 +1,26 @@
-import type { DecryptedRingTransaction } from "@heliuslabs/zolana/ring";
 import { explorerTxUrl } from "@/lib/config";
 import { formatAmount, isSol, toBase58, toHex } from "@/lib/format";
 import { Key } from "./ui";
 
-export function TransactionCard({ tx }: { tx: DecryptedRingTransaction }) {
+export interface ShownOutput {
+  readonly slotIndex: number;
+  readonly recipientViewingPublicKey: Uint8Array;
+  readonly asset: string;
+  readonly amount: bigint;
+  readonly spent?: boolean;
+}
+
+/** The fields the card renders, a `DecryptedRingTransaction` fits as is. */
+export interface ShownTransaction {
+  readonly signature: string;
+  readonly slot: bigint;
+  readonly signers: readonly string[];
+  readonly outputs: readonly ShownOutput[];
+  readonly undecryptableSlots: readonly number[];
+  readonly nullifiers: readonly Uint8Array[];
+}
+
+export function TransactionCard({ tx }: { tx: ShownTransaction }) {
   return (
     <article className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4 text-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
@@ -21,11 +38,13 @@ export function TransactionCard({ tx }: { tx: DecryptedRingTransaction }) {
         </span>
         <span className="text-xs text-muted tabular-nums">block {tx.slot.toString()}</span>
       </header>
-      <Row label="signers">
-        {tx.signers.map((signer) => (
-          <Key key={signer} value={signer} />
-        ))}
-      </Row>
+      {tx.signers.length > 0 && (
+        <Row label="signers">
+          {tx.signers.map((signer) => (
+            <Key key={signer} value={signer} />
+          ))}
+        </Row>
+      )}
       <table className="w-full text-xs">
         <thead className="text-left text-muted">
           <tr>
@@ -45,6 +64,7 @@ export function TransactionCard({ tx }: { tx: DecryptedRingTransaction }) {
               <td className="py-1">{isSol(output.asset) ? "SOL" : <Key value={output.asset} />}</td>
               <td className="py-1 text-right tabular-nums">
                 {formatAmount(output.amount, output.asset)}
+                {output.spent && <span className="ml-1 text-muted">spent</span>}
               </td>
             </tr>
           ))}
