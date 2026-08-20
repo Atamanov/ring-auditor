@@ -44,6 +44,14 @@ export function Passkeys({
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [request, setRequest] = useState<StoredPasskey>();
+  // Grants happen elsewhere (terminal, another browser), so the roles reload on
+  // demand and whenever the tab comes back into focus.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    window.addEventListener("focus", bump);
+    return () => window.removeEventListener("focus", bump);
+  }, []);
 
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
   const ring = ringId as Address;
@@ -67,7 +75,7 @@ export function Passkeys({
     return () => {
       live = false;
     };
-  }, [ringId, ring, keys, walletAddress, busy]);
+  }, [ringId, ring, keys, walletAddress, busy, tick]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -119,7 +127,20 @@ export function Passkeys({
   };
 
   return (
-    <Card title="Passkeys">
+    <Card
+      title={
+        <span className="flex items-center gap-2">
+          Passkeys
+          <button
+            onClick={() => setTick((n) => n + 1)}
+            title="Reload grant status"
+            className="text-xs text-muted hover:text-text"
+          >
+            ↻
+          </button>
+        </span>
+      }
+    >
       <p className="text-xs text-muted">
         A passkey (Touch ID, YubiKey) reads the ring once the authority grants its key. Copy the
         key to the authority, or grant it here with the authority wallet.
@@ -132,8 +153,14 @@ export function Passkeys({
           </div>
           <div className="flex items-center gap-2">
             {controls(passkeyPublicKey(p))}
-            {!isAuthority && roles[p.publicKey] !== "delegated reader" && (
-              <Button onClick={() => setRequest(p)}>Request grant</Button>
+            {roles[p.publicKey] !== "delegated reader" && (
+              <button
+                onClick={() => setRequest(p)}
+                title="Request a grant from the ring operator"
+                className="rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-text"
+              >
+                ✉
+              </button>
             )}
             <button
               onClick={() => onChange(passkeys.filter((q) => q.credentialId !== p.credentialId))}
