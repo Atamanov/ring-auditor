@@ -15,6 +15,7 @@ import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
 import { RING_RPC_URL, SOLANA_RPC_URL } from "@/lib/config";
 import { TransactionCard } from "./TransactionCard";
+import { GrantRequest } from "./GrantRequest";
 import { Badge, Button, Card } from "./ui";
 
 type Mode = "auditor" | "participant";
@@ -188,6 +189,12 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">{passkey ? "passkey is" : "wallet is"}</span>
             <Badge>{role}</Badge>
+            {mode === "auditor" && role === "participant only" && (
+              <GrantRequest
+                label={passkey ? passkey.label : "wallet"}
+                readerKey={passkey ? passkey.publicKey : walletAddress!}
+              />
+            )}
           </div>
         )}
         <div className="flex items-center gap-3">
