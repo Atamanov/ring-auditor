@@ -29,8 +29,8 @@ export function Connection({
   // Keyed by URL, so switching rings shows "probing" until the new RPC answers.
   const [health, setHealth] = useState<{ url: string; status: RingRpcHealth | string }>();
   const status = health?.url === rpcUrl ? health.status : "probing";
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<Ring>({ name: "", id: "", rpc: "" });
+  const [adding, setAdding] = useState(selection.rings.length === 0);
+  const [draft, setDraft] = useState<Ring>({ name: "", id: "", rpc: "", lookupTable: "" });
   const [amount, setAmount] = useState("0.05");
   const [note, setNote] = useState<string>();
   const [busy, setBusy] = useState<string>();
@@ -39,6 +39,7 @@ export function Connection({
   useEffect(() => {
     let live = true;
     const ringId = selection.selected as Address;
+    if (!ringId) return;
     new RingRpc(rpcUrl)
       .health()
       .then(async (s) => {
@@ -61,10 +62,20 @@ export function Connection({
   function add() {
     const ring: Ring = { name: draft.name.trim(), id: draft.id.trim() };
     if (draft.rpc?.trim()) ring.rpc = draft.rpc.trim();
+    if (draft.lookupTable?.trim()) ring.lookupTable = draft.lookupTable.trim();
     if (!ring.name || !ring.id) return;
-    onChange({ rings: [...selection.rings, ring], selected: ring.id });
-    setDraft({ name: "", id: "", rpc: "" });
+    onChange({
+      rings: [...selection.rings.filter((r) => r.id !== ring.id), ring],
+      selected: ring.id,
+    });
+    setDraft({ name: "", id: "", rpc: "", lookupTable: "" });
     setAdding(false);
+  }
+
+  function remove() {
+    const rings = selection.rings.filter((r) => r.id !== selection.selected);
+    onChange({ rings, selected: rings[0]?.id ?? "" });
+    if (rings.length === 0) setAdding(true);
   }
 
   // The wallet's notes on this ring, and the two moves that change them: a
@@ -108,6 +119,15 @@ export function Connection({
         >
           +
         </button>
+        {selection.selected && (
+          <button
+            onClick={remove}
+            className="rounded border border-line px-3 py-2 text-sm text-muted hover:text-text"
+            title="Remove this ring from the list"
+          >
+            ×
+          </button>
+        )}
       </div>
       {adding && (
         <div className="flex flex-wrap items-end gap-3">
@@ -127,14 +147,24 @@ export function Connection({
             placeholder={RING_RPC_URL}
             onChange={(e) => setDraft({ ...draft, rpc: e.target.value })}
           />
+          <Field
+            label="Lookup table, optional"
+            value={draft.lookupTable ?? ""}
+            placeholder="created on first transfer"
+            onChange={(e) => setDraft({ ...draft, lookupTable: e.target.value })}
+          />
           <Button onClick={add}>Add</Button>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-        <span>program</span>
-        <Mono>{selection.selected}</Mono>
-      </div>
-      {typeof status === "string" ? (
+      {selection.selected && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span>program</span>
+          <Mono>{selection.selected}</Mono>
+        </div>
+      )}
+      {!selection.selected ? (
+        <p className="text-xs text-muted">Add a ring to start: a name, its program id, and its RPC.</p>
+      ) : typeof status === "string" ? (
         <Badge>{status}</Badge>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
@@ -172,7 +202,9 @@ export function Connection({
           {busy === "deposit" ? "Depositing…" : "Deposit"}
         </Button>
         <Button
-          onClick={() => act("transfer", () => shielded.transfer(ring, rpcUrl, lamports()))}
+          onClick={() =>
+            act("transfer", () => shielded.transfer(selectedRing(selection)!, rpcUrl, lamports()))
+          }
           disabled={!canAct}
           title="Audited transfer inside the ring to a fresh recipient"
         >

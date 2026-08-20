@@ -10,7 +10,9 @@ cd ~/rings/demo && RING_RPC_ALLOW_ORIGINS=http://localhost:3000 just rpc   # rin
 cd ~/Projects/Helius/dev/ring-auditor && npm run dev                          # page on :3000
 ```
 
-`.env.local` already points the page at the ring (name "Rings.fun"). Phantom on devnet.
+Add the ring on the page: `+`, name "Rings.fun", program id above, RPC
+`http://127.0.0.1:9485`, lookup table `8osKVzQ7mACSc8ZJizKBKFftkhhi1MYdkLz9AghSaiqT`.
+Phantom on devnet.
 
 ## 0. Something to read
 

@@ -20,7 +20,7 @@ import {
   viewingKeyReader,
   type RingReadSigner,
 } from "@heliuslabs/zolana/ring";
-import { INDEXER_URL, PROVER_URL, RING_LOOKUP_TABLE, SOLANA_RPC_URL, TREE } from "./config";
+import { INDEXER_URL, PROVER_URL, SOLANA_RPC_URL, TREE, type Ring } from "./config";
 
 type ZolanaClient = Awaited<ReturnType<typeof createZolanaClient>>;
 
@@ -36,7 +36,7 @@ export interface Shielded {
   viewingKeySigner(): Promise<RingReadSigner>;
   refresh(ring: Address): Promise<bigint>;
   deposit(ring: Address, lamports: bigint): Promise<string>;
-  transfer(ring: Address, rpcUrl: string, lamports: bigint): Promise<string>;
+  transfer(ring: Ring, rpcUrl: string, lamports: bigint): Promise<string>;
 }
 
 const ShieldedContext = createContext<Shielded | undefined>(undefined);
@@ -157,7 +157,8 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
   );
 
   const transfer = useCallback(
-    async (ring: Address, rpcUrl: string, lamports: bigint) => {
+    async (ringEntry: Ring, rpcUrl: string, lamports: bigint) => {
+      const ring = ringEntry.id as Address;
       const auth = await derive();
       const c = await client();
       const shielded = await shieldedWallet(auth);
@@ -176,7 +177,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
           feePayer: walletAddress!,
           recipient: recipient.shieldedAddress(),
           amount: lamports,
-          lookupTable: await lookupTable(c, ring, wallet),
+          lookupTable: await lookupTable(c, ringEntry, wallet),
         }),
       );
       await refresh(ring);
@@ -209,14 +210,15 @@ async function send(wallet: WalletContextState, transaction: Transaction): Promi
   return signature;
 }
 
-// The ring's lookup table is the operator's, published in the env. A page
-// without one creates a table with the wallet and remembers it for this ring.
+// The ring's lookup table is the operator's, named on the ring entry. A ring
+// without one gets a table created with the wallet, remembered for this ring.
 async function lookupTable(
   client: ZolanaClient,
-  ring: Address,
+  ringEntry: Ring,
   wallet: WalletContextState,
 ): Promise<Address> {
-  if (RING_LOOKUP_TABLE) return RING_LOOKUP_TABLE;
+  if (ringEntry.lookupTable?.trim()) return ringEntry.lookupTable.trim() as Address;
+  const ring = ringEntry.id as Address;
   const key = `ring-auditor.lookup-table.${ring}`;
   const known = localStorage.getItem(key);
   if (known) return known as Address;
