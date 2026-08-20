@@ -59,6 +59,8 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
   const [busy, setBusy] = useState(false);
   // Bumped after every read so the badge follows a grant or revoke made meanwhile.
   const [reads, setReads] = useState(0);
+  // Who signed the page on screen, set on success, cleared when a new read starts.
+  const [fetchedBy, setFetchedBy] = useState<string>();
 
   const { hint } = MODES.find((m) => m.id === mode)!;
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
@@ -99,9 +101,15 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
   async function read() {
     setBusy(true);
     setError(undefined);
+    setViews([]);
+    setFetchedBy(undefined);
+    const signedBy = passkey
+      ? `passkey ${passkey.label} ${passkey.publicKey.slice(0, 6)}…${passkey.publicKey.slice(-4)}`
+      : `wallet ${walletAddress?.slice(0, 4)}…${walletAddress?.slice(-4)}`;
     try {
       if (passkey) {
         setViews([await page({ title: "Ring", signer: passkeySigner(passkey), items: [], skipped: [] })]);
+        setFetchedBy(signedBy);
         return;
       }
       const sender = walletSigner(wallet);
@@ -116,6 +124,7 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
       const loaded: View[] = [];
       for (const view of fresh) loaded.push(await page(view));
       setViews(loaded);
+      setFetchedBy(signedBy);
     } catch (e) {
       setViews([]);
       setError(errorMessage(e));
@@ -186,6 +195,11 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
             {busy ? "Signing…" : "Sign and read"}
           </Button>
           {error && <span className="text-sm text-accent-hover">{error}</span>}
+          {fetchedBy && !error && (
+            <span className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
+              fetched · signed by {fetchedBy}
+            </span>
+          )}
         </div>
       </Card>
       {views.map((view, index) => (
