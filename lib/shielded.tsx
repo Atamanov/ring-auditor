@@ -20,7 +20,7 @@ import {
   viewingKeyReader,
   type RingReadSigner,
 } from "@heliuslabs/zolana/ring";
-import { INDEXER_URL, PROVER_URL, RING_LOOKUP_TABLE, RING_RPC_URL, SOLANA_RPC_URL, TREE } from "./config";
+import { INDEXER_URL, PROVER_URL, RING_LOOKUP_TABLE, SOLANA_RPC_URL, TREE } from "./config";
 
 type ZolanaClient = Awaited<ReturnType<typeof createZolanaClient>>;
 
@@ -36,7 +36,7 @@ export interface Shielded {
   viewingKeySigner(): Promise<RingReadSigner>;
   refresh(ring: Address): Promise<bigint>;
   deposit(ring: Address, lamports: bigint): Promise<string>;
-  transfer(ring: Address, lamports: bigint): Promise<string>;
+  transfer(ring: Address, rpcUrl: string, lamports: bigint): Promise<string>;
 }
 
 const ShieldedContext = createContext<Shielded | undefined>(undefined);
@@ -157,7 +157,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
   );
 
   const transfer = useCallback(
-    async (ring: Address, lamports: bigint) => {
+    async (ring: Address, rpcUrl: string, lamports: bigint) => {
       const auth = await derive();
       const c = await client();
       const shielded = await shieldedWallet(auth);
@@ -169,7 +169,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
         wallet,
         await buildRingTransferTransaction({
           client: c,
-          ringRpc: new RingRpc(RING_RPC_URL),
+          ringRpc: new RingRpc(rpcUrl),
           ringProgramId: ring,
           wallet: shielded,
           authority: auth,

@@ -17,7 +17,7 @@ import {
 import { ringRole, type RingRole } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
-import { RING_RPC_URL, SOLANA_RPC_URL } from "@/lib/config";
+import { SOLANA_RPC_URL } from "@/lib/config";
 import { TransactionCard } from "./TransactionCard";
 import { toBase58, toHex } from "@/lib/format";
 import { GrantRequest } from "./GrantRequest";
@@ -69,16 +69,21 @@ function searchText(tx: DecryptedRingTransaction): string {
     .toLowerCase();
 }
 
-function errorMessage(e: unknown): string {
-  const details = (e as { details?: { message?: string } }).details;
+function errorMessage(e: unknown, rpcUrl: string): string {
+  const { code, details } = e as { code?: string; details?: { message?: string } };
+  if (code === "RING_RPC_TRANSPORT") {
+    return `no ring RPC answering at ${rpcUrl}. Is it running, and started with --allow-origin ${location.origin}?`;
+  }
   return details?.message ?? (e as Error).message;
 }
 
 export function ReadPanel({
   ring,
+  rpcUrl,
   passkeys,
 }: {
   ring: string;
+  rpcUrl: string;
   passkeys: StoredPasskey[];
 }) {
   const wallet = useWallet();
@@ -112,15 +117,15 @@ export function ReadPanel({
     let live = true;
     ringRole(SOLANA_RPC_URL, ring as Address, readerKey)
       .then((r) => live && setRole(r))
-      .catch((e: unknown) => live && setRole(errorMessage(e)));
+      .catch((e: unknown) => live && setRole(errorMessage(e, rpcUrl)));
     return () => {
       live = false;
     };
-  }, [ring, readerKey, reads]);
+  }, [ring, rpcUrl, readerKey, reads]);
 
   // Signed per request: the cursor and the time are in the attestation.
   async function page(view: View, from?: Uint8Array): Promise<View> {
-    const result = await new RingRpc(RING_RPC_URL).getDecryptedTransactions({
+    const result = await new RingRpc(rpcUrl).getDecryptedTransactions({
       ringProgramId: ring as Address,
       scope: mode === "auditor" ? "ring" : "participant",
       signer: view.signer,
@@ -185,7 +190,7 @@ export function ReadPanel({
       setFetchedBy(signedBy);
     } catch (e) {
       setViews([]);
-      setError(errorMessage(e));
+      setError(errorMessage(e, rpcUrl));
     } finally {
       setBusy(false);
       setReads((n) => n + 1);
@@ -200,7 +205,7 @@ export function ReadPanel({
       const next = await page(view, view.cursor);
       setViews((prev) => prev.map((v, i) => (i === index ? next : v)));
     } catch (e) {
-      setError(errorMessage(e));
+      setError(errorMessage(e, rpcUrl));
     } finally {
       setBusy(false);
     }

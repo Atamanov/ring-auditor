@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { loadRings, saveRings, type RingSelection } from "@/lib/config";
+import { loadRings, ringRpcUrl, saveRings, selectedRing, type RingSelection } from "@/lib/config";
 import { loadPasskeys, savePasskeys, type StoredPasskey } from "@/lib/passkeys";
 import { ShieldedProvider } from "@/lib/shielded";
 import { Connection } from "./Connection";
@@ -28,7 +28,11 @@ export default function Auditor() {
     <ShieldedProvider>
       <Connection selection={selection} onChange={updateSelection} />
       <Passkeys ring={selection.selected} passkeys={passkeys} onChange={updatePasskeys} />
-      <ReadPanel ring={selection.selected} passkeys={passkeys} />
+      <ReadPanel
+        ring={selection.selected}
+        rpcUrl={ringRpcUrl(selectedRing(selection))}
+        passkeys={passkeys}
+      />
     </ShieldedProvider>
   );
 }

@@ -1,11 +1,13 @@
 import { createSolanaRpc, getBase64Encoder, type Address } from "@solana/kit";
 import {
+  auditorViewTag,
   decodeReaderRecord,
   decodeRingProgramConfig,
   readerKeyEquals,
   readerRecordAddress,
   ringConfigAddress,
   type ReaderKey,
+  type RingRpcHealth,
 } from "@heliuslabs/zolana/ring";
 
 // What the ring RPC grants a key on the ring scope, read from chain.
@@ -44,4 +46,21 @@ export async function ringRole(
     return "delegated reader";
   }
   return "participant only";
+}
+
+// A local-mode ring RPC serves one ring and ignores the ring id in requests,
+// so a page pointed at the wrong RPC would show another ring's transactions.
+// The auditor tag the RPC reports has to be the one the ring's config names.
+export async function servesRing(
+  solanaRpcUrl: string,
+  ring: Address,
+  health: RingRpcHealth,
+): Promise<boolean> {
+  if (!health.auditorViewTag) return true;
+  const rpc = createSolanaRpc(solanaRpcUrl);
+  const { value } = await rpc.getAccountInfo(await ringConfigAddress(ring), { encoding: "base64" }).send();
+  if (!value || value.owner !== ring) return false;
+  const config = decodeRingProgramConfig(new Uint8Array(getBase64Encoder().encode(value.data[0])));
+  const expected = auditorViewTag(config.auditorPublicKey);
+  return expected.every((byte, index) => byte === health.auditorViewTag![index]);
 }

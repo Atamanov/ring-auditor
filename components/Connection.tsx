@@ -4,7 +4,15 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useState } from "react";
 import type { Address } from "@solana/kit";
 import { RingRpc, type RingRpcHealth } from "@heliuslabs/zolana/ring";
-import { RING_RPC_URL, SOLANA_RPC_URL, type Ring, type RingSelection } from "@/lib/config";
+import {
+  RING_RPC_URL,
+  SOLANA_RPC_URL,
+  ringRpcUrl,
+  selectedRing,
+  type Ring,
+  type RingSelection,
+} from "@/lib/config";
+import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { Badge, Button, Card, Field, Mono } from "./ui";
 
@@ -17,9 +25,12 @@ export function Connection({
 }) {
   const wallet = useWallet();
   const shielded = useShielded();
-  const [status, setStatus] = useState<RingRpcHealth | string>("probing");
+  const rpcUrl = ringRpcUrl(selectedRing(selection));
+  // Keyed by URL, so switching rings shows "probing" until the new RPC answers.
+  const [health, setHealth] = useState<{ url: string; status: RingRpcHealth | string }>();
+  const status = health?.url === rpcUrl ? health.status : "probing";
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<Ring>({ name: "", id: "" });
+  const [draft, setDraft] = useState<Ring>({ name: "", id: "", rpc: "" });
   const [amount, setAmount] = useState("0.05");
   const [note, setNote] = useState<string>();
   const [busy, setBusy] = useState<string>();
@@ -27,20 +38,32 @@ export function Connection({
 
   useEffect(() => {
     let live = true;
-    new RingRpc(RING_RPC_URL)
+    const ringId = selection.selected as Address;
+    new RingRpc(rpcUrl)
       .health()
-      .then((h) => live && setStatus(h))
-      .catch((e: Error) => live && setStatus(e.message));
+      .then(async (s) => {
+        const ok = await servesRing(SOLANA_RPC_URL, ringId, s).catch(() => true);
+        if (live) {
+          setHealth({
+            url: rpcUrl,
+            status: ok ? s : `the RPC at ${rpcUrl} serves another ring's auditor key`,
+          });
+        }
+      })
+      .catch(
+        () => live && setHealth({ url: rpcUrl, status: `no ring RPC answering at ${rpcUrl}` }),
+      );
     return () => {
       live = false;
     };
-  }, []);
+  }, [rpcUrl, selection.selected]);
 
   function add() {
-    const ring = { name: draft.name.trim(), id: draft.id.trim() };
+    const ring: Ring = { name: draft.name.trim(), id: draft.id.trim() };
+    if (draft.rpc?.trim()) ring.rpc = draft.rpc.trim();
     if (!ring.name || !ring.id) return;
     onChange({ rings: [...selection.rings, ring], selected: ring.id });
-    setDraft({ name: "", id: "" });
+    setDraft({ name: "", id: "", rpc: "" });
     setAdding(false);
   }
 
@@ -98,6 +121,12 @@ export function Connection({
             value={draft.id}
             onChange={(e) => setDraft({ ...draft, id: e.target.value })}
           />
+          <Field
+            label="Ring RPC URL"
+            value={draft.rpc ?? ""}
+            placeholder={RING_RPC_URL}
+            onChange={(e) => setDraft({ ...draft, rpc: e.target.value })}
+          />
           <Button onClick={add}>Add</Button>
         </div>
       )}
@@ -143,7 +172,7 @@ export function Connection({
           {busy === "deposit" ? "Depositing…" : "Deposit"}
         </Button>
         <Button
-          onClick={() => act("transfer", () => shielded.transfer(ring, lamports()))}
+          onClick={() => act("transfer", () => shielded.transfer(ring, rpcUrl, lamports()))}
           disabled={!canAct}
           title="Audited transfer inside the ring to a fresh recipient"
         >
@@ -151,7 +180,7 @@ export function Connection({
         </Button>
       </div>
       <p className="text-xs text-muted">
-        ring rpc {RING_RPC_URL} · solana {SOLANA_RPC_URL}
+        ring rpc {rpcUrl} · solana {SOLANA_RPC_URL}
       </p>
       {note && <Mono>{note}</Mono>}
     </Card>

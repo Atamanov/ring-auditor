@@ -13,6 +13,16 @@ export const RING_LOOKUP_TABLE = process.env.NEXT_PUBLIC_RING_LOOKUP_TABLE as Ad
 export interface Ring {
   name: string;
   id: string;
+  /** This ring's RPC. A local-mode RPC serves one ring, so each ring names its own. */
+  rpc?: string;
+}
+
+export function ringRpcUrl(ring: Ring | undefined): string {
+  return ring?.rpc?.trim() || RING_RPC_URL;
+}
+
+export function selectedRing(selection: RingSelection): Ring | undefined {
+  return selection.rings.find((r) => r.id === selection.selected);
 }
 
 // The ring the page starts on. Others are added on the page and kept locally.
