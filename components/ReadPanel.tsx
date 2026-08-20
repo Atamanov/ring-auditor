@@ -97,7 +97,6 @@ export function ReadPanel({
   const [busy, setBusy] = useState(false);
   // Bumped after every read so the badge follows a grant or revoke made meanwhile.
   const [reads, setReads] = useState(0);
-  // Where the page on screen came from, set on success, cleared when a new read starts.
   const [fetchedBy, setFetchedBy] = useState<string>();
   const [query, setQuery] = useState("");
 
