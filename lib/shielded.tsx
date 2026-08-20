@@ -69,6 +69,9 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
   );
   const clientRef = useRef<Promise<ZolanaClient>>(undefined);
   const shieldedRef = useRef<{ wallet?: Address; state?: Wallet }>({});
+  // The derived keys, readable before React re-renders: an action that derives
+  // and then syncs in one go must not ask the wallet twice.
+  const authorityRef = useRef<{ wallet?: Address; authority?: LocalWalletAuthority }>({});
 
   const client = useCallback(() => {
     clientRef.current ??= createZolanaClient({
@@ -83,6 +86,9 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
 
   const derive = useCallback(async () => {
     if (authority) return authority;
+    if (authorityRef.current.wallet === walletAddress && authorityRef.current.authority) {
+      return authorityRef.current.authority;
+    }
     const { signMessage } = wallet;
     if (!walletAddress || !signMessage) throw new Error("connect a wallet first");
     // The client loads Poseidon, which the derived nullifier key hashes with.
@@ -91,6 +97,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
       solanaPublicKey: walletAddress,
       derivationSeed: await signMessage(ed25519DerivationPayload()),
     });
+    authorityRef.current = { wallet: walletAddress, authority: derived };
     setAuthority(derived);
     return derived;
   }, [authority, client, setAuthority, wallet, walletAddress]);
