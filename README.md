@@ -19,9 +19,13 @@ SDK's `RingReadSigner`, and derives the wallet's viewing key with one
 `signMessage` over the bare derivation payload `TSPP/derive/v1` (browser
 wallets refuse the off-chain envelope). The key lives in page state only.
 
-The Ring card lists named rings, `+` adds one, and **Test transact** runs two
-ring deposits and one audited transfer from the connected wallet, signed in
-the wallet, so the Participant view has the wallet's own transfer to show.
+The Ring card lists named rings, `+` adds one, and shows the wallet's balance
+on the ring with **Deposit** (shield SOL from the wallet) and **Transfer** (an
+audited transfer inside the ring to a fresh recipient), each one wallet
+signature. The wallet's shielded keys are derived once per connection from its
+signature over `TSPP/derive/v1` and reused by every action and the Participant
+view. The ring's lookup table is the operator's, published as
+`NEXT_PUBLIC_RING_LOOKUP_TABLE`; a page without one creates it with the wallet.
 Service URLs are deployment settings in `.env.local` (see `.env.example`).
 
 ## Delegating reads

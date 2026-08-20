@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Address } from "@solana/kit";
 import { RingRpc, type RingRpcHealth } from "@heliuslabs/zolana/ring";
 import { RING_RPC_URL, SOLANA_RPC_URL, type Ring, type RingSelection } from "@/lib/config";
-import { testTransact } from "@/lib/transact";
+import { useShielded } from "@/lib/shielded";
 import { Badge, Button, Card, Field, Mono } from "./ui";
 
 export function Connection({
@@ -16,11 +16,14 @@ export function Connection({
   onChange: (selection: RingSelection) => void;
 }) {
   const wallet = useWallet();
+  const shielded = useShielded();
   const [status, setStatus] = useState<RingRpcHealth | string>("probing");
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Ring>({ name: "", id: "" });
-  const [transact, setTransact] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [amount, setAmount] = useState("0.05");
+  const [note, setNote] = useState<string>();
+  const [busy, setBusy] = useState<string>();
+  const ring = selection.selected as Address;
 
   useEffect(() => {
     let live = true;
@@ -41,20 +44,22 @@ export function Connection({
     setAdding(false);
   }
 
-  // A demo transfer on the selected ring from the connected wallet, so the
-  // Participant view has something of its own to show.
-  async function transactFromWallet() {
-    setBusy(true);
+  // The wallet's notes on this ring, and the two moves that change them: a
+  // deposit from the wallet, a transfer inside the ring to a fresh recipient.
+  async function act(label: string, action: () => Promise<string>) {
+    setBusy(label);
+    setNote(undefined);
     try {
-      const signature = await testTransact(wallet, selection.selected as Address, setTransact);
-      setTransact(`sent ${signature}`);
+      setNote(await action());
     } catch (e) {
       const details = (e as { details?: { message?: string } }).details;
-      setTransact(details?.message ?? (e as Error).message);
+      setNote(details?.message ?? (e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(undefined);
     }
   }
+  const lamports = () => BigInt(Math.round(Number(amount) * 1_000_000_000));
+  const canAct = !busy && !!selection.selected && !!wallet.publicKey;
 
   return (
     <Card title="Ring">
@@ -80,13 +85,6 @@ export function Connection({
         >
           +
         </button>
-        <Button
-          onClick={transactFromWallet}
-          disabled={busy || !selection.selected || !wallet.publicKey}
-          title="Two deposits and one audited transfer from the connected wallet"
-        >
-          {busy ? "Transacting…" : "Test transact"}
-        </Button>
       </div>
       {adding && (
         <div className="flex flex-wrap items-end gap-3">
@@ -116,10 +114,46 @@ export function Connection({
           <Mono>{status.servicePublicKey}</Mono>
         </div>
       )}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1 text-sm">
+          <span className="text-muted uppercase tracking-wide text-xs">Balance on ring</span>
+          <span className="tabular-nums">
+            {shielded.balance === undefined
+              ? "—"
+              : `${(Number(shielded.balance) / 1_000_000_000).toFixed(4)} SOL`}
+          </span>
+        </div>
+        <Button
+          onClick={() => act("refresh", () => shielded.refresh(ring).then(() => "synced"))}
+          disabled={!canAct}
+        >
+          {busy === "refresh" ? "Syncing…" : "Refresh"}
+        </Button>
+        <Field
+          label="Amount, SOL"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+        />
+        <Button
+          onClick={() => act("deposit", () => shielded.deposit(ring, lamports()))}
+          disabled={!canAct}
+          title="Shield SOL from the wallet into the ring"
+        >
+          {busy === "deposit" ? "Depositing…" : "Deposit"}
+        </Button>
+        <Button
+          onClick={() => act("transfer", () => shielded.transfer(ring, lamports()))}
+          disabled={!canAct}
+          title="Audited transfer inside the ring to a fresh recipient"
+        >
+          {busy === "transfer" ? "Proving…" : "Transfer"}
+        </Button>
+      </div>
       <p className="text-xs text-muted">
         ring rpc {RING_RPC_URL} · solana {SOLANA_RPC_URL}
       </p>
-      {transact && <Mono>{transact}</Mono>}
+      {note && <Mono>{note}</Mono>}
     </Card>
   );
 }

@@ -7,6 +7,8 @@ export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://127.0.
 export const PROVER_URL = process.env.NEXT_PUBLIC_PROVER_URL ?? "http://127.0.0.1:3701";
 export const TREE = (process.env.NEXT_PUBLIC_ZOLANA_TREE ??
   "trEEbaNobcTESNmtsPBj3FX27q5sDCQePV2kb12FYho") as Address;
+/** The ring's address lookup table, created once by the operator. */
+export const RING_LOOKUP_TABLE = process.env.NEXT_PUBLIC_RING_LOOKUP_TABLE as Address | undefined;
 
 export interface Ring {
   name: string;

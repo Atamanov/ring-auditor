@@ -11,7 +11,8 @@ import {
 } from "@heliuslabs/zolana/ring";
 import { passkeyPublicKey, passkeySigner, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
-import { derivedViewingKeySigner, walletSigner } from "@/lib/signers";
+import { useShielded } from "@/lib/shielded";
+import { walletSigner } from "@/lib/signers";
 import { RING_RPC_URL, SOLANA_RPC_URL } from "@/lib/config";
 import { TransactionCard } from "./TransactionCard";
 import { Badge, Button, Card } from "./ui";
@@ -48,6 +49,7 @@ function errorMessage(e: unknown): string {
 
 export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPasskey[] }) {
   const wallet = useWallet();
+  const shielded = useShielded();
   const [mode, setMode] = useState<Mode>("auditor");
   // Auditor mode signs with the wallet or one of the stored passkeys.
   const [signerId, setSignerId] = useState("wallet");
@@ -109,12 +111,7 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
           ? [{ title: "Ring", signer: sender, items: [], skipped: [] }]
           : [
               { title: "Sent", signer: sender, items: [], skipped: [] },
-              {
-                title: "Received",
-                signer: (await derivedViewingKeySigner(wallet))!,
-                items: [],
-                skipped: [],
-              },
+              { title: "Received", signer: await shielded.viewingKeySigner(), items: [], skipped: [] },
             ];
       const loaded: View[] = [];
       for (const view of fresh) loaded.push(await page(view));

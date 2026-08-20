@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { loadRings, saveRings, type RingSelection } from "@/lib/config";
 import { loadPasskeys, savePasskeys, type StoredPasskey } from "@/lib/passkeys";
+import { ShieldedProvider } from "@/lib/shielded";
 import { Connection } from "./Connection";
 import { Passkeys } from "./Passkeys";
 import { ReadPanel } from "./ReadPanel";
@@ -24,10 +25,10 @@ export default function Auditor() {
   }
 
   return (
-    <>
+    <ShieldedProvider>
       <Connection selection={selection} onChange={updateSelection} />
       <Passkeys ring={selection.selected} passkeys={passkeys} onChange={updatePasskeys} />
       <ReadPanel ring={selection.selected} passkeys={passkeys} />
-    </>
+    </ShieldedProvider>
   );
 }

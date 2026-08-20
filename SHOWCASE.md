@@ -14,8 +14,10 @@ cd ~/Projects/Helius/dev/ring-auditor && npm run dev                          # 
 
 ## 0. Something to read
 
-Connect any wallet with devnet SOL, **Test transact**: two deposits and one
-audited transfer signed in the wallet. About half a minute.
+Connect any wallet with devnet SOL. **Refresh** derives the wallet's shielded
+keys (one signature, once per session) and shows its balance on the ring.
+**Deposit** shields SOL (one signature), **Transfer** moves it inside the ring
+with an audit proof (one signature, about twenty seconds).
 
 ## 1. Auditor, wallet
 
