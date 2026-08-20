@@ -7,6 +7,8 @@ import { Badge, Card, Field, Mono } from "./ui";
 export interface Target {
   url: string;
   ring: string;
+  /** Solana RPC, read for the ring config and the wallet's reader record. */
+  solanaRpc: string;
 }
 
 export function Connection({
@@ -41,6 +43,11 @@ export function Connection({
           label="Ring program id"
           value={target.ring}
           onChange={(e) => onChange({ ...target, ring: e.target.value })}
+        />
+        <Field
+          label="Solana RPC URL"
+          value={target.solanaRpc}
+          onChange={(e) => onChange({ ...target, solanaRpc: e.target.value })}
         />
       </div>
       {typeof status === "string" ? (
