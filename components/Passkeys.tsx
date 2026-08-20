@@ -15,7 +15,7 @@ import { passkeyPublicKey, registerPasskey, type StoredPasskey } from "@/lib/pas
 import { ringRole, type RingRole } from "@/lib/role";
 import { SOLANA_RPC_URL } from "@/lib/config";
 import { GrantRequest } from "./GrantRequest";
-import { Badge, Button, Card, Field, Mono } from "./ui";
+import { Badge, Button, Card, Field, Key } from "./ui";
 
 function errorMessage(e: unknown): string {
   const details = (e as { details?: { message?: string } }).details;
@@ -24,10 +24,6 @@ function errorMessage(e: unknown): string {
 
 // Passkeys this browser registered, and the authority's grant controls. A key
 // pasted from another machine can be granted here too, the list stays local.
-function short(hex: string): string {
-  return `${hex.slice(0, 6)}…${hex.slice(-6)}`;
-}
-
 export function Passkeys({
   ring: ringId,
   passkeys,
@@ -149,7 +145,7 @@ export function Passkeys({
         <div key={p.credentialId} className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-col">
             <span className="text-sm">{p.label}</span>
-            <Mono>{short(p.publicKey)}</Mono>
+            <Key value={p.publicKey} />
           </div>
           <div className="flex items-center gap-2">
             {controls(passkeyPublicKey(p))}

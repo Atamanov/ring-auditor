@@ -43,3 +43,15 @@ export function loadRings(): RingSelection {
 export function saveRings(selection: RingSelection): void {
   localStorage.setItem(STORAGE, JSON.stringify(selection));
 }
+
+/** Solana Explorer link for a transaction on the configured cluster. */
+export function explorerTxUrl(signature: string): string {
+  const url = new URL(`https://explorer.solana.com/tx/${signature}`);
+  if (/devnet/.test(SOLANA_RPC_URL)) url.searchParams.set("cluster", "devnet");
+  else if (/testnet/.test(SOLANA_RPC_URL)) url.searchParams.set("cluster", "testnet");
+  else if (!/mainnet/.test(SOLANA_RPC_URL)) {
+    url.searchParams.set("cluster", "custom");
+    url.searchParams.set("customUrl", SOLANA_RPC_URL);
+  }
+  return url.href;
+}

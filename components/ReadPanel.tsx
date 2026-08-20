@@ -19,8 +19,9 @@ import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
 import { RING_RPC_URL, SOLANA_RPC_URL } from "@/lib/config";
 import { TransactionCard } from "./TransactionCard";
+import { toBase58, toHex } from "@/lib/format";
 import { GrantRequest } from "./GrantRequest";
-import { Badge, Button, Card } from "./ui";
+import { Badge, Button, Card, Field } from "./ui";
 
 type Mode = "auditor" | "participant";
 
@@ -50,6 +51,24 @@ interface View {
   page: number;
 }
 
+// Every field of a transaction as searchable text, lowercased once per row.
+function searchText(tx: DecryptedRingTransaction): string {
+  return [
+    tx.signature,
+    tx.slot.toString(),
+    ...tx.signers,
+    ...tx.outputs.flatMap((o) => [
+      toHex(o.recipientViewingPublicKey),
+      o.asset,
+      o.amount.toString(),
+      (Number(o.amount) / 1_000_000_000).toString(),
+    ]),
+    ...tx.nullifiers.map(toBase58),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
 function errorMessage(e: unknown): string {
   const details = (e as { details?: { message?: string } }).details;
   return details?.message ?? (e as Error).message;
@@ -75,6 +94,7 @@ export function ReadPanel({
   const [reads, setReads] = useState(0);
   // Who signed the page on screen, set on success, cleared when a new read starts.
   const [fetchedBy, setFetchedBy] = useState<string>();
+  const [query, setQuery] = useState("");
 
   const { hint } = MODES.find((m) => m.id === mode)!;
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
@@ -251,8 +271,21 @@ export function ReadPanel({
           )}
         </div>
       </Card>
+      {views.length > 0 && (
+        <Field
+          label="Search signature, block, signer, recipient, asset, amount, nullifier"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setViews((prev) => prev.map((v) => ({ ...v, page: 0 })));
+          }}
+          placeholder="…"
+        />
+      )}
       {views.map((view, index) => {
-        const pages = Math.max(1, Math.ceil(view.items.length / PAGE));
+        const needle = query.trim().toLowerCase();
+        const items = needle ? view.items.filter((tx) => searchText(tx).includes(needle)) : view.items;
+        const pages = Math.max(1, Math.ceil(items.length / PAGE));
         const turn = (to: number) =>
           setViews((prev) =>
             prev.map((v, i) => (i === index ? { ...v, page: to } : v)),

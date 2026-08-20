@@ -1,4 +1,6 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+"use client";
+
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 
 export function Field({
   label,
@@ -74,5 +76,31 @@ export function Modal({
         {children}
       </div>
     </div>
+  );
+}
+
+/** A long identifier shown truncated in the middle; a click copies the whole value. */
+export function Key({ value, head = 6, tail = 6 }: { value: string; head?: number; tail?: number }) {
+  const [copied, setCopied] = useState(false);
+  // `head` and `tail` of 0 render a plain copy control.
+  const short =
+    head + tail === 0
+      ? "copy"
+      : value.length > head + tail + 1
+        ? `${value.slice(0, head)}…${value.slice(-tail)}`
+        : value;
+  return (
+    <button
+      type="button"
+      title={copied ? "copied" : `${value}\nclick to copy`}
+      onClick={() => {
+        void navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+      className={`font-mono text-xs ${copied ? "text-emerald-400" : head + tail === 0 ? "text-muted hover:text-text" : "hover:text-accent"}`}
+    >
+      {copied ? "copied" : short}
+    </button>
   );
 }
