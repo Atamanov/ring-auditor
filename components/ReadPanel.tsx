@@ -9,7 +9,11 @@ import {
   type DecryptedRingTransactionsPage,
   type RingReadSigner,
 } from "@heliuslabs/zolana/ring";
-import { passkeyPublicKey, passkeySigner, type StoredPasskey } from "@/lib/passkeys";
+import {
+  passkeyPublicKey,
+  passkeySigner,
+  type StoredPasskey,
+} from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
@@ -33,7 +37,9 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
   },
 ];
 
-const PAGE = 10n;
+// One signature fetches up to the RPC's page maximum; the table pages locally.
+const FETCH = 1000n;
+const PAGE = 10;
 
 interface View {
   title: string;
@@ -41,6 +47,7 @@ interface View {
   items: DecryptedRingTransaction[];
   skipped: DecryptedRingTransactionsPage["skipped"];
   cursor?: Uint8Array;
+  page: number;
 }
 
 function errorMessage(e: unknown): string {
@@ -48,7 +55,13 @@ function errorMessage(e: unknown): string {
   return details?.message ?? (e as Error).message;
 }
 
-export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPasskey[] }) {
+export function ReadPanel({
+  ring,
+  passkeys,
+}: {
+  ring: string;
+  passkeys: StoredPasskey[];
+}) {
   const wallet = useWallet();
   const shielded = useShielded();
   const [mode, setMode] = useState<Mode>("auditor");
@@ -65,7 +78,10 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
 
   const { hint } = MODES.find((m) => m.id === mode)!;
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
-  const passkey = mode === "auditor" ? passkeys.find((p) => p.credentialId === signerId) : undefined;
+  const passkey =
+    mode === "auditor"
+      ? passkeys.find((p) => p.credentialId === signerId)
+      : undefined;
   const readerKey = useMemo(
     () => (passkey ? passkeyPublicKey(passkey) : walletAddress),
     [passkey, walletAddress],
@@ -88,7 +104,7 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
       ringProgramId: ring as Address,
       scope: mode === "auditor" ? "ring" : "participant",
       signer: view.signer,
-      limit: PAGE,
+      limit: FETCH,
       ...(from === undefined ? {} : { cursor: from }),
     });
     return {
@@ -96,6 +112,7 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
       items: from ? [...view.items, ...result.items] : [...result.items],
       skipped: [...result.skipped],
       cursor: result.cursor,
+      page: 0,
     };
   }
 
@@ -109,7 +126,15 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
       : `wallet ${walletAddress?.slice(0, 4)}…${walletAddress?.slice(-4)}`;
     try {
       if (passkey) {
-        setViews([await page({ title: "Ring", signer: passkeySigner(passkey), items: [], skipped: [] })]);
+        setViews([
+          await page({
+            title: "Ring",
+            signer: passkeySigner(passkey),
+            items: [],
+            skipped: [],
+            page: 0,
+          }),
+        ]);
         setFetchedBy(signedBy);
         return;
       }
@@ -117,10 +142,22 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
       if (!sender) throw new Error("connect a wallet first");
       const fresh: View[] =
         mode === "auditor"
-          ? [{ title: "Ring", signer: sender, items: [], skipped: [] }]
+          ? [{ title: "Ring", signer: sender, items: [], skipped: [], page: 0 }]
           : [
-              { title: "Sent", signer: sender, items: [], skipped: [] },
-              { title: "Received", signer: await shielded.viewingKeySigner(), items: [], skipped: [] },
+              {
+                title: "Sent",
+                signer: sender,
+                items: [],
+                skipped: [],
+                page: 0,
+              },
+              {
+                title: "Received",
+                signer: await shielded.viewingKeySigner(),
+                items: [],
+                skipped: [],
+                page: 0,
+              },
             ];
       const loaded: View[] = [];
       for (const view of fresh) loaded.push(await page(view));
@@ -187,7 +224,9 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
         )}
         {role && readerKey && ring && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">{passkey ? "passkey is" : "wallet is"}</span>
+            <span className="text-xs text-muted">
+              {passkey ? "passkey is" : "wallet is"}
+            </span>
             <Badge>{role}</Badge>
             {mode === "auditor" && role === "participant only" && (
               <GrantRequest
@@ -198,7 +237,10 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
           </div>
         )}
         <div className="flex items-center gap-3">
-          <Button onClick={read} disabled={busy || !ring || (!passkey && !walletAddress)}>
+          <Button
+            onClick={read}
+            disabled={busy || !ring || (!passkey && !walletAddress)}
+          >
             {busy ? "Signing…" : "Sign and read"}
           </Button>
           {error && <span className="text-sm text-accent-hover">{error}</span>}
@@ -209,32 +251,68 @@ export function ReadPanel({ ring, passkeys }: { ring: string; passkeys: StoredPa
           )}
         </div>
       </Card>
-      {views.map((view, index) => (
-        <section key={view.title} className="flex flex-col gap-3">
-          {views.length > 1 && (
-            <h2 className="text-sm font-medium">
-              {view.title} <span className="text-muted">{view.items.length}</span>
-            </h2>
-          )}
-          {view.items.map((tx) => (
-            <TransactionCard key={tx.signature} tx={tx} />
-          ))}
-          {view.skipped.length > 0 && (
-            <Card title={`Skipped ${view.skipped.length}`}>
-              {view.skipped.map((entry) => (
-                <p key={entry.signature} className="text-xs text-muted">
-                  <span className="font-mono">{entry.signature}</span> {entry.reason}
-                </p>
+      {views.map((view, index) => {
+        const pages = Math.max(1, Math.ceil(view.items.length / PAGE));
+        const turn = (to: number) =>
+          setViews((prev) =>
+            prev.map((v, i) => (i === index ? { ...v, page: to } : v)),
+          );
+        return (
+          <section key={view.title} className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <h2 className="font-medium">
+                {view.title}{" "}
+                <span className="text-muted">
+                  {view.items.length} transaction
+                  {view.items.length === 1 ? "" : "s"}
+                  {view.cursor ? " loaded" : ""}
+                </span>
+              </h2>
+              {pages > 1 && (
+                <div className="flex items-center gap-2 text-xs text-muted">
+                  <button
+                    onClick={() => turn(view.page - 1)}
+                    disabled={view.page === 0}
+                    className="disabled:opacity-40 hover:text-text"
+                  >
+                    ‹
+                  </button>
+                  <span className="tabular-nums">
+                    {view.page + 1} / {pages}
+                  </span>
+                  <button
+                    onClick={() => turn(view.page + 1)}
+                    disabled={view.page >= pages - 1}
+                    className="disabled:opacity-40 hover:text-text"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+            </div>
+            {view.items
+              .slice(view.page * PAGE, (view.page + 1) * PAGE)
+              .map((tx) => (
+                <TransactionCard key={tx.signature} tx={tx} />
               ))}
-            </Card>
-          )}
-          {view.cursor && (
-            <Button onClick={() => older(index)} disabled={busy}>
-              Older
-            </Button>
-          )}
-        </section>
-      ))}
+            {view.skipped.length > 0 && (
+              <Card title={`Skipped ${view.skipped.length}`}>
+                {view.skipped.map((entry) => (
+                  <p key={entry.signature} className="text-xs text-muted">
+                    <span className="font-mono">{entry.signature}</span>{" "}
+                    {entry.reason}
+                  </p>
+                ))}
+              </Card>
+            )}
+            {view.cursor && (
+              <Button onClick={() => older(index)} disabled={busy}>
+                Load older (sign)
+              </Button>
+            )}
+          </section>
+        );
+      })}
     </>
   );
 }

@@ -7,7 +7,7 @@ export function TransactionCard({ tx }: { tx: DecryptedRingTransaction }) {
     <article className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4 text-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <Mono>{tx.signature}</Mono>
-        <span className="text-xs text-muted tabular-nums">slot {tx.slot.toString()}</span>
+        <span className="text-xs text-muted tabular-nums">block {tx.slot.toString()}</span>
       </header>
       <Row label="signers">
         {tx.signers.map((signer) => (
@@ -17,7 +17,7 @@ export function TransactionCard({ tx }: { tx: DecryptedRingTransaction }) {
       <table className="w-full text-xs">
         <thead className="text-left text-muted">
           <tr>
-            <th className="font-normal">slot</th>
+            <th className="font-normal">output</th>
             <th className="font-normal">recipient viewing key</th>
             <th className="font-normal">asset</th>
             <th className="text-right font-normal">amount</th>
