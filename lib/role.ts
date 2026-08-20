@@ -2,22 +2,24 @@ import { createSolanaRpc, getBase64Encoder, type Address } from "@solana/kit";
 import {
   decodeReaderRecord,
   decodeRingProgramConfig,
+  readerKeyEquals,
   readerRecordAddress,
   ringConfigAddress,
+  type ReaderKey,
 } from "@heliuslabs/zolana/ring";
 
-// What the ring RPC will grant the wallet on the ring scope, read from chain.
+// What the ring RPC grants a key on the ring scope, read from chain.
 export type RingRole = "authority" | "delegated reader" | "participant only";
 
 export async function ringRole(
   solanaRpcUrl: string,
   ring: Address,
-  wallet: Address,
+  reader: ReaderKey,
 ): Promise<RingRole> {
   const rpc = createSolanaRpc(solanaRpcUrl);
   const [config, record] = await Promise.all([
     ringConfigAddress(ring),
-    readerRecordAddress(ring, wallet),
+    readerRecordAddress(ring, reader),
   ]);
   const { value } = await rpc
     .getMultipleAccounts([config, record], { encoding: "base64" })
@@ -30,11 +32,14 @@ export async function ringRole(
   const authority = decodeRingProgramConfig(
     new Uint8Array(base64.encode(configAccount.data[0])),
   ).authority;
-  if (authority === wallet) return "authority";
+  if (readerKeyEquals(authority, reader)) return "authority";
   if (
     recordAccount &&
     recordAccount.owner === ring &&
-    decodeReaderRecord(new Uint8Array(base64.encode(recordAccount.data[0]))).reader === wallet
+    readerKeyEquals(
+      decodeReaderRecord(new Uint8Array(base64.encode(recordAccount.data[0]))).reader,
+      reader,
+    )
   ) {
     return "delegated reader";
   }

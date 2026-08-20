@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { loadPasskeys, savePasskeys, type StoredPasskey } from "@/lib/passkeys";
 import { Connection, type Target } from "./Connection";
+import { Passkeys } from "./Passkeys";
 import { ReadPanel } from "./ReadPanel";
 
 const STORAGE = "ring-auditor.target";
@@ -19,15 +21,23 @@ export default function Auditor() {
     ...JSON.parse(localStorage.getItem(STORAGE) ?? "{}"),
   }));
 
+  const [passkeys, setPasskeys] = useState<StoredPasskey[]>(loadPasskeys);
+
   function update(next: Target) {
     setTarget(next);
     localStorage.setItem(STORAGE, JSON.stringify(next));
   }
 
+  function updatePasskeys(next: StoredPasskey[]) {
+    setPasskeys(next);
+    savePasskeys(next);
+  }
+
   return (
     <>
       <Connection target={target} onChange={update} />
-      <ReadPanel target={target} />
+      <Passkeys target={target} passkeys={passkeys} onChange={updatePasskeys} />
+      <ReadPanel target={target} passkeys={passkeys} />
     </>
   );
 }

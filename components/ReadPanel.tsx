@@ -1,7 +1,7 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Address } from "@solana/kit";
 import {
   RingRpc,
@@ -9,6 +9,7 @@ import {
   type DecryptedRingTransactionsPage,
   type RingReadSigner,
 } from "@heliuslabs/zolana/ring";
+import { passkeyPublicKey, passkeySigner, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
 import { derivedViewingKeySigner, walletSigner } from "@/lib/signers";
 import type { Target } from "./Connection";
@@ -45,9 +46,11 @@ function errorMessage(e: unknown): string {
   return details?.message ?? (e as Error).message;
 }
 
-export function ReadPanel({ target }: { target: Target }) {
+export function ReadPanel({ target, passkeys }: { target: Target; passkeys: StoredPasskey[] }) {
   const wallet = useWallet();
   const [mode, setMode] = useState<Mode>("auditor");
+  // Auditor mode signs with the wallet or one of the stored passkeys.
+  const [signerId, setSignerId] = useState("wallet");
   const [views, setViews] = useState<View[]>([]);
   const [role, setRole] = useState<RingRole | string>();
   const [error, setError] = useState<string>();
@@ -55,17 +58,22 @@ export function ReadPanel({ target }: { target: Target }) {
 
   const { hint } = MODES.find((m) => m.id === mode)!;
   const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
+  const passkey = mode === "auditor" ? passkeys.find((p) => p.credentialId === signerId) : undefined;
+  const readerKey = useMemo(
+    () => (passkey ? passkeyPublicKey(passkey) : walletAddress),
+    [passkey, walletAddress],
+  );
 
   useEffect(() => {
-    if (!walletAddress || !target.ring) return;
+    if (!readerKey || !target.ring) return;
     let live = true;
-    ringRole(target.solanaRpc, target.ring as Address, walletAddress)
+    ringRole(target.solanaRpc, target.ring as Address, readerKey)
       .then((r) => live && setRole(r))
       .catch((e: unknown) => live && setRole(errorMessage(e)));
     return () => {
       live = false;
     };
-  }, [target.solanaRpc, target.ring, walletAddress]);
+  }, [target.solanaRpc, target.ring, readerKey]);
 
   // Signed per request: the cursor and the time are in the attestation.
   async function page(view: View, from?: Uint8Array): Promise<View> {
@@ -88,6 +96,10 @@ export function ReadPanel({ target }: { target: Target }) {
     setBusy(true);
     setError(undefined);
     try {
+      if (passkey) {
+        setViews([await page({ title: "Ring", signer: passkeySigner(passkey), items: [], skipped: [] })]);
+        return;
+      }
       const sender = walletSigner(wallet);
       if (!sender) throw new Error("connect a wallet first");
       const fresh: View[] =
@@ -145,14 +157,31 @@ export function ReadPanel({ target }: { target: Target }) {
           ))}
         </div>
         <p className="text-xs text-muted">{hint}</p>
-        {role && walletAddress && target.ring && (
+        {mode === "auditor" && passkeys.length > 0 && (
+          <label className="flex items-center gap-2 text-xs text-muted">
+            sign with
+            <select
+              value={signerId}
+              onChange={(e) => setSignerId(e.target.value)}
+              className="rounded border border-line bg-bg px-2 py-1 text-sm text-text"
+            >
+              <option value="wallet">wallet</option>
+              {passkeys.map((p) => (
+                <option key={p.credentialId} value={p.credentialId}>
+                  passkey · {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {role && readerKey && target.ring && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">wallet is</span>
+            <span className="text-xs text-muted">{passkey ? "passkey is" : "wallet is"}</span>
             <Badge>{role}</Badge>
           </div>
         )}
         <div className="flex items-center gap-3">
-          <Button onClick={read} disabled={busy || !target.ring}>
+          <Button onClick={read} disabled={busy || !target.ring || (!passkey && !walletAddress)}>
             {busy ? "Signing…" : "Sign and read"}
           </Button>
           {error && <span className="text-sm text-accent-hover">{error}</span>}

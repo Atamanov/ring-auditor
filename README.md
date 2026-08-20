@@ -6,6 +6,7 @@ the two read scopes the RPC authorizes with a signature over the request.
 | Read as | Key | Sees |
 | --- | --- | --- |
 | Ring auditor | the connected wallet, the ring's authority or a reader it granted | every transaction of the ring |
+| Ring auditor, passkey | a passkey (Touch ID, YubiKey) the authority granted | every transaction of the ring |
 | Participant | the connected wallet, plus the viewing key derived from it | the transactions the wallet signed, and the outputs sent to it |
 
 The page reads the ring config and the wallet's reader record from the Solana
@@ -22,14 +23,32 @@ derives. The key lives in page state only. The rest is the page.
 
 The authority grants ring-scope reads to another key on chain, so the authority
 key never has to sign in a browser and a Squads-held authority can grant by
-proposal. In the ring repository:
+proposal. Either from the ring repository, with a base58 wallet key or the hex
+key of a passkey:
 
 ```bash
-just grant-reader <wallet pubkey>
-just revoke-reader <wallet pubkey>
+just grant-reader <key>
+just revoke-reader <key>
 ```
 
-A granted wallet reads as "Ring auditor" like the authority does.
+or from the page: connect the authority wallet and the Passkeys card shows
+Grant and Revoke for every listed key, plus a field for a key pasted from
+another machine.
+
+## Passkeys
+
+1. Auditor: Passkeys card, "Create passkey". The browser offers Touch ID or a
+   security key. The page keeps the credential id and the public key, nothing
+   secret, and shows the key.
+2. Authority: grant the key, from the page or the CLI.
+3. Auditor: "Ring auditor", sign with the passkey, touch. Every read is one
+   gesture, the signature covers the page it requests.
+4. Authority: revoke. The next read fails with `unauthorized`.
+
+A passkey signs through WebAuthn, so the ring RPC checks the page's origin
+against `RING_RPC_ALLOW_ORIGINS`, the same list that allows the browser to call
+it. An RPC without that list accepts no passkey. Safari, Chrome and Brave share
+the flow; the YubiKey needs a PIN or touch set up for user verification.
 
 ## Run
 
