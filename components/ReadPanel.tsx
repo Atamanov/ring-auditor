@@ -296,6 +296,7 @@ export function ReadPanel({
               <h2 className="font-medium">
                 {view.title}{" "}
                 <span className="text-muted">
+                  {needle ? `${items.length} of ` : ""}
                   {view.items.length} transaction
                   {view.items.length === 1 ? "" : "s"}
                   {view.cursor ? " loaded" : ""}
@@ -323,7 +324,7 @@ export function ReadPanel({
                 </div>
               )}
             </div>
-            {view.items
+            {items
               .slice(view.page * PAGE, (view.page + 1) * PAGE)
               .map((tx) => (
                 <TransactionCard key={tx.signature} tx={tx} />
