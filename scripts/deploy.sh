@@ -11,18 +11,14 @@
 #
 # Needs aws (with write access), docker, jq, git.
 #
-# Environment
-#   RING_RPC_URL        required
-#   PROVER_URL          required
-#   INDEXER_URL         required
-#   SOLANA_RPC_URL      default https://api.devnet.solana.com
-#   ZOLANA_TREE         default trEEbaNobcTESNmtsPBj3FX27q5sDCQePV2kb12FYho
+# Environment, defaults from .env.deploy
+#   RING_RPC_URL, PROVER_URL, INDEXER_URL, SOLANA_RPC_URL, ZOLANA_TREE
 #   AWS_REGION          default eu-north-1
 #   DEPLOY_VPC          VPC id, default the account's default VPC
 set -euo pipefail
 
 usage() {
-    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -31,6 +27,9 @@ command="$1"
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
+while IFS='=' read -r name value; do
+    [[ -n "$name" && "$name" != \#* && -z "${!name:-}" ]] && export "$name=$value"
+done < .env.deploy
 region="${AWS_REGION:-eu-north-1}"
 prefix="ring-auditor-test"
 tag_spec="Key=$prefix,Value=1"
