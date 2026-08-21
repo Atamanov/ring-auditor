@@ -72,8 +72,8 @@ RING_RPC_ALLOW_ORIGINS=http://localhost:3000 just rpc
 Then:
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Copy `.env.example` to `.env.local` and set the ring, then open
@@ -86,7 +86,7 @@ The same request from a Solana keypair file, useful to check an RPC without a
 wallet:
 
 ```bash
-npm run read -- --ring <program id> --keypair ~/.config/solana/id.json
+pnpm read --ring <program id> --keypair ~/.config/solana/id.json
 ```
 
 ## Wire format
@@ -96,5 +96,5 @@ The request layout and the signed attestation are documented on
 against the Rust server by the SDK's tests. The page signs again for every
 request because the cursor and the time are both part of the signature.
 
-The SDK is consumed as a `file:` dependency on the zolana checkout next to
+The SDK is consumed as a `link:` dependency on the `zolana-ts` checkout next to
 this repository (`npm run build:ts` there refreshes it).

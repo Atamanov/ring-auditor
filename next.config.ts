@@ -2,7 +2,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // The SDK is a file: dependency one directory up, so the module graph root
+  // The SDK is a link: dependency one directory up, so the module graph root
   // must cover both checkouts.
   turbopack: {
     root: path.join(__dirname, ".."),
@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     resolveAlias: Object.fromEntries(
       ["hasher_wasm_simd_bg.wasm", "light_wasm_hasher_bg.wasm"].map((file) => [
         file,
-        `../zolana/node_modules/@lightprotocol/hasher.rs/dist/${file}`,
+        `../zolana-ts/node_modules/@lightprotocol/hasher.rs/dist/${file}`,
       ]),
     ),
   },

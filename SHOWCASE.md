@@ -7,7 +7,7 @@ Authority `2GNuM5ksdfNxGNbwf2hrnND9FHgQsdju7vz8CyGd7Zjy` (`~/.config/solana/id.j
 
 ```bash
 cd ~/rings/demo && RING_RPC_ALLOW_ORIGINS=http://localhost:3000 just rpc   # ring RPC on :9485
-cd ~/Projects/Helius/dev/ring-auditor && npm run dev                          # page on :3000
+cd ~/Projects/Helius/dev/ring-auditor && pnpm dev                          # page on :3000
 ```
 
 Add the ring on the page: `+`, name "Rings.fun", program id above, RPC

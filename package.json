@@ -6,17 +6,20 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm lint",
     "read": "node --experimental-strip-types --no-warnings scripts/read.ts"
   },
   "dependencies": {
-    "@heliuslabs/zolana": "file:../zolana/sdk-libs/ts",
+    "@heliuslabs/zolana": "link:../zolana-ts/sdk-libs/ts",
     "@noble/curves": "^2.3.0",
     "@scure/base": "^2.3.0",
     "@solana/kit": "^7.1.1",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-standard-wallet-adapter-base": "^1.1.5",
     "@solana/web3.js": "^1.98.4",
     "next": "16.3.1",
     "react": "19.2.8",
@@ -24,12 +27,29 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@wallet-standard/base": "^1.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "packageManager": "pnpm@10.6.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "pnpm": {
+    "overrides": {
+      "uuid@<11.1.1": "^11.1.1"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-5p2g-fcmc-qvqq",
+        "GHSA-w3rx-r6r6-pgpr"
+      ]
+    },
+    "onlyBuiltDependencies": []
   }
 }
