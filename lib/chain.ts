@@ -64,7 +64,16 @@ export async function sendTransaction(
   if (!wallet.signTransaction) throw new Error("the wallet cannot sign transactions");
   const connection = new Connection(SOLANA_RPC_URL, "confirmed");
   const wire = new Uint8Array(getTransactionEncoder().encode(transaction));
-  const signed = await wallet.signTransaction(VersionedTransaction.deserialize(wire));
+  const unsigned = VersionedTransaction.deserialize(wire);
+  // The wallet's own simulation hides the program logs, so the page runs one first.
+  const simulation = await connection.simulateTransaction(unsigned, { sigVerify: false });
+  if (simulation.value.err) {
+    const logs = (simulation.value.logs ?? []).filter((line) => /failed|Error|error/.test(line));
+    throw new Error(
+      `simulation failed on ${SOLANA_RPC_URL}: ${JSON.stringify(simulation.value.err)}${logs.length ? `\n${logs.join("\n")}` : ""}`,
+    );
+  }
+  const signed = await wallet.signTransaction(unsigned);
   const signature = await connection.sendRawTransaction(signed.serialize());
   // The transaction's own lifetime bounds the wait, a later blockhash would outlive it.
   const { blockhash, lastValidBlockHeight } = isTransactionWithBlockhashLifetime(transaction)
