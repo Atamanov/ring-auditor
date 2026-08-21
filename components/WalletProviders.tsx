@@ -9,12 +9,14 @@ import dynamic from "next/dynamic";
 import { useCallback, type ReactNode } from "react";
 import { Toaster, toast } from "sonner";
 import { SOLANA_RPC_URL } from "@/lib/config";
+import { isUserRejection } from "@/lib/errors";
 import { shortKey } from "@/lib/format";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 /** `wallets` stays empty, Wallet Standard wallets register themselves. */
 export function WalletProviders({ children }: { children: ReactNode }) {
   const onError = useCallback((e: WalletError, adapter?: Adapter) => {
+    if (isUserRejection(e)) return;
     if (e.name === "WalletAccountError" && adapter instanceof StandardWalletAdapter) {
       void describeAccounts(adapter).then((text) => toast.error(text));
       return;

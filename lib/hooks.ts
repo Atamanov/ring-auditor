@@ -5,7 +5,7 @@ import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { toast } from "sonner";
 import type { Address } from "@solana/kit";
 import { walletAddress } from "./chain";
-import { errorMessage } from "./errors";
+import { errorMessage, isUserRejection } from "./errors";
 import type { Stored } from "./storage";
 
 export function useWalletAddress(): Address | undefined {
@@ -80,7 +80,8 @@ export function useAction<L extends string = string>(
       try {
         await action();
       } catch (e) {
-        toast.error(describe(e));
+        if (isUserRejection(e)) toast("cancelled in the wallet");
+        else toast.error(describe(e));
       } finally {
         setBusy(undefined);
       }
