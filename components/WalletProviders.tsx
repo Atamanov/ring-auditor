@@ -6,36 +6,40 @@ import { StandardWalletAdapter } from "@solana/wallet-standard-wallet-adapter-ba
 import type { WalletAccount } from "@wallet-standard/base";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import dynamic from "next/dynamic";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
+import { Toaster, toast } from "sonner";
 import { SOLANA_RPC_URL } from "@/lib/config";
 import { shortKey } from "@/lib/format";
-import { IconButton } from "./ui";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 /** `wallets` stays empty, Wallet Standard wallets register themselves. */
 export function WalletProviders({ children }: { children: ReactNode }) {
-  const [error, setError] = useState<string>();
   const onError = useCallback((e: WalletError, adapter?: Adapter) => {
     if (e.name === "WalletAccountError" && adapter instanceof StandardWalletAdapter) {
-      void describeAccounts(adapter).then(setError);
+      void describeAccounts(adapter).then((text) => toast.error(text));
       return;
     }
-    setError(`${e.name}: ${e.message || String(e.error ?? "")}`);
+    toast.error(`${e.name} ${e.message || String(e.error ?? "")}`);
     console.error(e);
   }, []);
   return (
     <ConnectionProvider endpoint={SOLANA_RPC_URL}>
       <WalletProvider wallets={[]} autoConnect onError={onError}>
         <WalletModalProvider>
-          {error && (
-            <div role="alert" className="border-b border-line bg-surface px-6 py-2 text-xs text-accent-hover">
-              wallet: {error}{" "}
-              <IconButton title="dismiss" onClick={() => setError(undefined)}>
-                dismiss
-              </IconButton>
-            </div>
-          )}
           {children}
+          <Toaster
+            theme="dark"
+            position="bottom-right"
+            closeButton
+            toastOptions={{
+              style: {
+                background: "var(--surface)",
+                borderColor: "var(--line)",
+                color: "var(--text)",
+                fontFamily: "var(--font-sans)",
+              },
+            }}
+          />
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

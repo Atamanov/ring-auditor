@@ -13,7 +13,7 @@ import { useAction, useLoaded, useRefreshToken } from "@/lib/hooks";
 import { registerPasskey, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
 import { GrantRequest } from "./GrantRequest";
-import { Badge, Button, Card, Failure, Field, Hint, IconButton, Key } from "./ui";
+import { Badge, Button, Card, Field, Hint, IconButton, Key } from "./ui";
 
 export function Passkeys({
   ring,
@@ -28,7 +28,7 @@ export function Passkeys({
   const authority = walletAddress(wallet);
   const [label, setLabel] = useState("");
   const [pasted, setPasted] = useState("");
-  const { busy, error, run } = useAction();
+  const { busy, run } = useAction();
   const [token, reload] = useRefreshToken();
 
   const roles = useLoaded(
@@ -112,7 +112,6 @@ export function Passkeys({
           </Button>
         </div>
       )}
-      {error && <Failure>{error}</Failure>}
     </Card>
   );
 }

@@ -19,7 +19,8 @@ Phantom on devnet.
 Connect any wallet with devnet SOL. **Refresh** derives the wallet's shielded
 keys (one signature, once per session) and shows its balance on the ring.
 **Deposit** shields SOL (one signature), **Transfer** moves it inside the ring
-with an audit proof from the prover (one signature, about twenty seconds).
+to a registered recipient and **Burn** to a key nobody holds, each with an audit
+proof from the prover (one signature, about twenty seconds).
 
 ## 1. Auditor, wallet
 

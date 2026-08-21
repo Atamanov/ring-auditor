@@ -1,7 +1,7 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { Address } from "@solana/kit";
 import {
   RingRpc,
@@ -12,7 +12,7 @@ import {
 import { walletAddress } from "@/lib/chain";
 import { ringRpcErrorMessage } from "@/lib/errors";
 import { shortKey } from "@/lib/format";
-import { useLoaded } from "@/lib/hooks";
+import { useAction, useLoaded } from "@/lib/hooks";
 import { participantViews } from "@/lib/participant";
 import { passkeySigner, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole } from "@/lib/role";
@@ -21,7 +21,7 @@ import { walletSigner } from "@/lib/signers";
 import type { ShownTransaction } from "@/lib/transactions";
 import { GrantRequest } from "./GrantRequest";
 import { TransactionList } from "./TransactionList";
-import { Badge, Button, Card, Failure, Field, Hint, Select, Success } from "./ui";
+import { Badge, Button, Card, Field, Hint, Select, Success } from "./ui";
 
 type Mode = "auditor" | "participant";
 
@@ -64,8 +64,6 @@ export function ReadPanel({
   const [mode, setMode] = useState<Mode>("auditor");
   const [signerId, setSignerId] = useState(WALLET);
   const [views, setViews] = useState<readonly View[]>([]);
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
   const [fetchedBy, setFetchedBy] = useState<string>();
   const [query, setQuery] = useState("");
   // A read re-checks the role and remounts the lists.
@@ -95,20 +93,12 @@ export function ReadPanel({
     };
   }
 
-  async function load(work: () => Promise<void>) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await work();
-    } catch (e) {
-      setError(ringRpcErrorMessage(e, rpcUrl));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { busy, run } = useAction<"read" | "older">(
+    useCallback((e: unknown) => ringRpcErrorMessage(e, rpcUrl), [rpcUrl]),
+  );
 
   const read = () =>
-    load(async () => {
+    run("read", async () => {
       setViews([]);
       setFetchedBy(undefined);
       setReads((n) => n + 1);
@@ -130,7 +120,7 @@ export function ReadPanel({
     });
 
   const older = (index: number, from: NonNullable<View["older"]>) =>
-    load(async () => {
+    run("older", async () => {
       const next = await fetchPage(from.signer, from.cursor);
       setViews((prev) =>
         prev.map((v, i) => (i === index ? { ...next, title: v.title, items: [...v.items, ...next.items] } : v)),
@@ -180,7 +170,7 @@ export function ReadPanel({
           </div>
         )}
         <div className="flex items-center gap-3">
-          <Button onClick={read} disabled={busy || !ring || !readerKey}>
+          <Button onClick={read} disabled={!!busy || !ring || !readerKey}>
             {mode === "participant"
               ? busy
                 ? "Syncing…"
@@ -189,8 +179,7 @@ export function ReadPanel({
                 ? "Signing…"
                 : "Sign and read"}
           </Button>
-          {error && <Failure>{error}</Failure>}
-          {fetchedBy && !error && <Success>fetched · {fetchedBy}</Success>}
+          {fetchedBy && <Success>fetched · {fetchedBy}</Success>}
         </div>
       </Card>
       {views.length > 0 && (
@@ -211,7 +200,7 @@ export function ReadPanel({
           loadedSoFar={from !== undefined}
           footer={
             from && (
-              <Button onClick={() => older(index, from)} disabled={busy}>
+              <Button onClick={() => older(index, from)} disabled={!!busy}>
                 Load older (sign)
               </Button>
             )

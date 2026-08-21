@@ -10,7 +10,13 @@ import {
   createZolanaClient,
   syncWallet,
 } from "@heliuslabs/zolana";
-import { ShieldedKeypair, SigningKey, ed25519DerivationPayload, type Bytes32 } from "@heliuslabs/zolana/keypair";
+import {
+  ShieldedAddress,
+  ShieldedKeypair,
+  SigningKey,
+  ed25519DerivationPayload,
+  type Bytes32,
+} from "@heliuslabs/zolana/keypair";
 import {
   buildRingDepositTransaction,
   buildRingLookupTableTransaction,
@@ -35,7 +41,9 @@ export interface Shielded {
   sync(): Promise<Synced>;
   refresh(ring: Address): Promise<bigint>;
   deposit(ring: Address, lamports: bigint): Promise<string>;
-  transfer(ring: Ring, lamports: bigint): Promise<string>;
+  transfer(ring: Ring, lamports: bigint, recipient: Address): Promise<string>;
+  /** A transfer to a key nobody holds. */
+  burn(ring: Ring, lamports: bigint): Promise<string>;
 }
 
 interface Session {
@@ -140,8 +148,8 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     [client, refresh, shieldedWallet, wallet],
   );
 
-  const transfer = useCallback(
-    async (ring: Ring, lamports: bigint) => {
+  const transferTo = useCallback(
+    async (ring: Ring, lamports: bigint, recipient: Address | ShieldedAddress) => {
       const { authority, shielded, owner } = await shieldedWallet();
       const c = await client();
       await refresh(ring.id);
@@ -153,7 +161,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
           wallet: shielded,
           authority,
           feePayer: owner,
-          recipient: freshRecipient(),
+          recipient,
           amount: lamports,
           lookupTable: await lookupTable(c, ring, wallet),
         }),
@@ -164,14 +172,23 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     [client, refresh, shieldedWallet, wallet],
   );
 
+  const transfer = useCallback(
+    (ring: Ring, lamports: bigint, recipient: Address) => transferTo(ring, lamports, recipient),
+    [transferTo],
+  );
+  const burn = useCallback(
+    (ring: Ring, lamports: bigint) => transferTo(ring, lamports, freshRecipient()),
+    [transferTo],
+  );
+
   const value = useMemo<Shielded>(
-    () => ({ balance: current?.balance, sync, refresh, deposit, transfer }),
-    [current?.balance, sync, refresh, deposit, transfer],
+    () => ({ balance: current?.balance, sync, refresh, deposit, transfer, burn }),
+    [current?.balance, sync, refresh, deposit, transfer, burn],
   );
   return <ShieldedContext.Provider value={value}>{children}</ShieldedContext.Provider>;
 }
 
-function freshRecipient() {
+function freshRecipient(): ShieldedAddress {
   const seed = new Uint8Array(32);
   crypto.getRandomValues(seed);
   return ShieldedKeypair.fromKeypair(SigningKey.fromEd25519Bytes(seed as Bytes32)).shieldedAddress();

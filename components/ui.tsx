@@ -88,14 +88,6 @@ export function Success({ children }: { children: ReactNode }) {
   );
 }
 
-export function Failure({ children }: { children: ReactNode }) {
-  return (
-    <span role="alert" className="text-sm text-accent-hover">
-      {children}
-    </span>
-  );
-}
-
 export function Hint({ children }: { children: ReactNode }) {
   return <p className="text-xs text-muted">{children}</p>;
 }

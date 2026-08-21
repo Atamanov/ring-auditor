@@ -2,6 +2,7 @@
 
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useCallback, useEffect, useEffectEvent, useState } from "react";
+import { toast } from "sonner";
 import type { Address } from "@solana/kit";
 import { walletAddress } from "./chain";
 import { errorMessage } from "./errors";
@@ -65,25 +66,26 @@ export function useRefreshToken(): [number, () => void] {
 
 export interface Action<L extends string> {
   readonly busy: L | undefined;
-  readonly error: string | undefined;
   readonly run: (label: L, action: () => Promise<void>) => Promise<void>;
-  readonly clearError: () => void;
 }
 
-export function useAction<L extends string = string>(): Action<L> {
+/** A failure is toasted, `describe` rewords it first. */
+export function useAction<L extends string = string>(
+  describe: (e: unknown) => string = errorMessage,
+): Action<L> {
   const [busy, setBusy] = useState<L>();
-  const [error, setError] = useState<string>();
-  const run = useCallback(async (label: L, action: () => Promise<void>) => {
-    setBusy(label);
-    setError(undefined);
-    try {
-      await action();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(undefined);
-    }
-  }, []);
-  const clearError = useCallback(() => setError(undefined), []);
-  return { busy, error, run, clearError };
+  const run = useCallback(
+    async (label: L, action: () => Promise<void>) => {
+      setBusy(label);
+      try {
+        await action();
+      } catch (e) {
+        toast.error(describe(e));
+      } finally {
+        setBusy(undefined);
+      }
+    },
+    [describe],
+  );
+  return { busy, run };
 }
