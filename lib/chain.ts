@@ -1,7 +1,7 @@
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
 import {
-  appendTransactionMessageInstruction,
+  appendTransactionMessageInstructions,
   compileTransaction,
   createSolanaRpc,
   createTransactionMessage,
@@ -30,17 +30,30 @@ export function connectedAddress(wallet: WalletContextState): Address {
 export async function sendInstruction(
   wallet: WalletContextState,
   instruction: Instruction,
+  computeUnitLimit?: number,
 ): Promise<string> {
   const feePayer = connectedAddress(wallet);
   const { value: blockhash } = await createSolanaRpc(SOLANA_RPC_URL).getLatestBlockhash().send();
+  const instructions =
+    computeUnitLimit === undefined
+      ? [instruction]
+      : [computeUnitLimitInstruction(computeUnitLimit), instruction];
   const transaction = pipe(
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayer(feePayer, m),
     (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
-    (m) => appendTransactionMessageInstruction(instruction, m),
+    (m) => appendTransactionMessageInstructions(instructions, m),
     compileTransaction,
   );
   return sendTransaction(wallet, transaction);
+}
+
+/** `SetComputeUnitLimit`, tag 2 then the limit as little-endian u32. */
+function computeUnitLimitInstruction(units: number): Instruction {
+  const data = new Uint8Array(5);
+  data[0] = 2;
+  new DataView(data.buffer).setUint32(1, units, true);
+  return { programAddress: "ComputeBudget111111111111111111111111111111" as Address, data };
 }
 
 /** Signs a kit transaction in the wallet and waits for confirmation. */

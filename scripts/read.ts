@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58 } from "@scure/base";
 import type { Address } from "@solana/kit";
+import { P256PublicKey } from "@heliuslabs/zolana/keypair";
 import { RingRpc, readerKeyBytes, type RingReadSigner } from "@heliuslabs/zolana/ring";
 
 const { values } = parseArgs({
@@ -40,7 +41,9 @@ do {
           ? value.toString()
           : value instanceof Uint8Array
             ? Buffer.from(value).toString("hex")
-            : value,
+            : value instanceof P256PublicKey
+              ? Buffer.from(value.toBytes()).toString("hex")
+              : value,
       2,
     ),
   );

@@ -4,6 +4,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useCallback, useState } from "react";
 import type { Address } from "@solana/kit";
 import {
+  RING_READ_PAGE_LIMIT,
   RingRpc,
   parseReaderKey,
   type RingReadSigner,
@@ -39,8 +40,8 @@ const MODE_ORDER = ["auditor", "participant"] as const satisfies readonly Mode[]
 
 const WALLET = "wallet";
 
-/** Per signature, the list pages locally. */
-const FETCH = 1000n;
+/** Per signature, the RPC's page bound. */
+const FETCH = RING_READ_PAGE_LIMIT;
 
 interface View {
   readonly title: string;
@@ -87,7 +88,14 @@ export function ReadPanel({
       ...(cursor === undefined ? {} : { cursor }),
     });
     return {
-      items: page.items,
+      items: page.items.map((item) => ({
+        ...item,
+        signers: [],
+        outputs: item.outputs.map((output) => ({
+          ...output,
+          recipientViewingPublicKey: output.recipientViewingPublicKey.toBytes(),
+        })),
+      })),
       skipped: page.skipped,
       older: page.cursor ? { signer, cursor: page.cursor } : undefined,
     };

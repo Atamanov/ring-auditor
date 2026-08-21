@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@heliuslabs/zolana':
-        specifier: link:../zolana-ts/sdk-libs/ts
-        version: link:../zolana-ts/sdk-libs/ts
+        specifier: link:../zolana-ts-rings/sdk-libs/ts
+        version: link:../zolana-ts-rings/sdk-libs/ts
       '@noble/curves':
         specifier: ^2.3.0
         version: 2.3.0

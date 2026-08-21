@@ -4,6 +4,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import type { Address } from "@solana/kit";
 import {
+  RING_READER_COMPUTE_UNIT_LIMIT,
   grantReaderInstruction,
   parseReaderKey,
   revokeReaderInstruction,
@@ -64,7 +65,7 @@ export function Passkeys({
             rentRecipient: authority,
           })
         : await grantReaderInstruction({ ringProgramId: ring, payer: authority, authority, reader });
-      await sendInstruction(wallet, instruction);
+      await sendInstruction(wallet, instruction, RING_READER_COMPUTE_UNIT_LIMIT);
       setPasted("");
       reload();
     });

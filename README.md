@@ -98,5 +98,5 @@ The request layout and the signed attestation are documented on
 against the Rust server by the SDK's tests. The page signs again for every
 request because the cursor and the time are both part of the signature.
 
-The SDK is consumed as a `link:` dependency on the `zolana-ts` checkout next to
+The SDK is consumed as a `link:` dependency on the `zolana-ts-rings` checkout next to
 this repository, `build:ts` there refreshes it.
