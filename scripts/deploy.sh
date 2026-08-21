@@ -12,14 +12,15 @@
 #
 # Needs aws (with write access), docker, jq, git.
 #
-# Environment, defaults from .env.deploy
+# Environment, defaults from .env.deploy. `up` looks the ring RPC and prover up
+# in CloudFront (the zolana-rings-test stack) and rewrites those two lines.
 #   RING_RPC_URL, PROVER_URL, INDEXER_URL, SOLANA_RPC_URL, ZOLANA_TREE
 #   AWS_REGION          default eu-north-1
 #   DEPLOY_VPC          VPC id, default the account's default VPC
 set -euo pipefail
 
 usage() {
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -188,9 +189,22 @@ ensure_service() {
     fi
 }
 
+# The hosted ring RPC and prover are the zolana-rings-test distributions.
+resolve_service_urls() {
+    local name host var
+    for name in ring-rpc prover; do
+        host="$(aws_ cloudfront list-distributions --query "DistributionList.Items[?Comment=='zolana-rings-test-$name'].DomainName | [0]" --output text 2>/dev/null || true)"
+        [[ "$host" != None && -n "$host" ]] || { log "no zolana-rings-test-$name distribution, deploy the zolana ring test stack first"; exit 1; }
+        var=RING_RPC_URL; [[ "$name" == ring-rpc ]] || var=PROVER_URL
+        export "$var=https://$host"
+        sed -i.bak "s#^$var=.*#$var=https://$host#" .env.deploy && rm -f .env.deploy.bak
+    done
+}
+
 up() {
-    : "${RING_RPC_URL:?set RING_RPC_URL}" "${PROVER_URL:?set PROVER_URL}" "${INDEXER_URL:?set INDEXER_URL}"
-    [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { log "working tree is dirty"; exit 1; }
+    resolve_service_urls
+    : "${INDEXER_URL:?set INDEXER_URL}"
+    [[ -z "$(git status --porcelain --untracked-files=no -- . ':!.env.deploy')" ]] || { log "working tree is dirty"; exit 1; }
     local tag
     tag="$(git rev-parse --short=12 HEAD)"
 
