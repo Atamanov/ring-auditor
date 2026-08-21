@@ -6,7 +6,8 @@
 #   scripts/deploy.sh status    address and health
 #   scripts/deploy.sh down      delete everything it created
 #
-# The page is built with the service URLs baked in. Point the ring RPC it talks
+# The page is served over HTTPS through a CloudFront distribution on an amazon
+# hostname. It is built with the service URLs baked in. Point the ring RPC it talks
 # to at this deployment's origin (RING_RPC_ALLOW_ORIGINS, RING_RPC_WEBAUTHN_RP_ID).
 #
 # Needs aws (with write access), docker, jq, git.
@@ -18,7 +19,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -109,6 +110,39 @@ ensure_load_balancer() {
     aws_ elbv2 describe-load-balancers --load-balancer-arns "$arn" --query 'LoadBalancers[0].DNSName' --output text
 }
 
+# CloudFront in front of the load balancer gives HTTPS on an amazon hostname
+# with Amazon's certificate, no domain to validate.
+ensure_distribution() {
+    local name="$1" origin="$2" origin_port="$3" id
+    id="$(aws_ cloudfront list-distributions --query "DistributionList.Items[?Comment=='$name'].Id | [0]" --output text 2>/dev/null || true)"
+    if [[ "$id" == None || -z "$id" ]]; then
+        id="$(aws_ cloudfront create-distribution --distribution-config "$(jq -n --arg name "$name" --arg origin "$origin" --argjson port "$origin_port" '{
+            CallerReference: $name, Comment: $name, Enabled: true, HttpVersion: "http2", PriceClass: "PriceClass_100",
+            Origins: {Quantity: 1, Items: [{Id: "origin", DomainName: $origin,
+                CustomOriginConfig: {HTTPPort: $port, HTTPSPort: 443, OriginProtocolPolicy: "http-only",
+                    OriginReadTimeout: 60, OriginKeepaliveTimeout: 5, OriginSslProtocols: {Quantity: 1, Items: ["TLSv1.2"]}}}]},
+            DefaultCacheBehavior: {TargetOriginId: "origin", ViewerProtocolPolicy: "redirect-to-https",
+                AllowedMethods: {Quantity: 7, Items: ["GET","HEAD","OPTIONS","PUT","POST","PATCH","DELETE"],
+                    CachedMethods: {Quantity: 2, Items: ["GET","HEAD"]}},
+                CachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+                OriginRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac", Compress: true}
+        }')" --query 'Distribution.Id' --output text)"
+        aws_ cloudfront tag-resource --resource "arn:aws:cloudfront::$account:distribution/$id" --tags "Items=[{$tag_spec}]"
+    fi
+    aws_ cloudfront get-distribution --id "$id" --query 'Distribution.DomainName' --output text
+}
+
+remove_distribution() {
+    local name="$1" id etag
+    id="$(aws_ cloudfront list-distributions --query "DistributionList.Items[?Comment=='$name'].Id | [0]" --output text 2>/dev/null || true)"
+    [[ "$id" != None && -n "$id" ]] || return 0
+    etag="$(aws_ cloudfront get-distribution-config --id "$id" --query ETag --output text)"
+    aws_ cloudfront get-distribution-config --id "$id" --query DistributionConfig | jq '.Enabled = false' > "/tmp/$name.json"
+    etag="$(aws_ cloudfront update-distribution --id "$id" --if-match "$etag" --distribution-config "file:///tmp/$name.json" --query ETag --output text)"
+    aws_ cloudfront wait distribution-deployed --id "$id"
+    aws_ cloudfront delete-distribution --id "$id" --if-match "$etag"
+}
+
 build_image() {
     local tag="$1"
     local image="$registry/$repository:$tag"
@@ -180,17 +214,20 @@ up() {
     log "== service"
     task_definition="$(register_task "$image" "$role_arn")"
     ensure_service "$task_definition" "$subnets" "$sg"
+    log "== https"
+    local host
+    host="$(ensure_distribution "$prefix" "$dns" "$port")"
     log "waiting for the service to stabilize"
     aws_ ecs wait services-stable --cluster "$cluster" --services "$prefix"
-    log "allow this origin on the ring RPC, RING_RPC_ALLOW_ORIGINS=http://$dns and RING_RPC_WEBAUTHN_RP_ID=$dns"
+    log "passkeys need the ring RPC to name this page, RING_RPC_ALLOW_ORIGINS=https://$host RING_RPC_WEBAUTHN_RP_ID=$host"
     status
 }
 
 status() {
-    local dns
-    dns="$(aws_ elbv2 describe-load-balancers --names "$load_balancer" --query 'LoadBalancers[0].DNSName' --output text 2>/dev/null || echo "-")"
-    echo "auditor   http://$dns"
-    curl -sf --max-time 10 -o /dev/null "http://$dns/" && echo "ok" || echo "not reachable yet"
+    local host
+    host="$(aws_ cloudfront list-distributions --query "DistributionList.Items[?Comment=='$prefix'].DomainName | [0]" --output text)"
+    echo "auditor   https://$host"
+    curl -sf --max-time 15 -o /dev/null "https://$host/" && echo "ok" || echo "not reachable over https yet"
     echo "logs      aws logs tail $log_group --region $region --follow"
 }
 
@@ -204,6 +241,7 @@ down() {
         aws_ ecs deregister-task-definition --task-definition "$td" >/dev/null
     done
     aws_ ecs delete-cluster --cluster "$cluster" >/dev/null 2>&1 || true
+    remove_distribution "$prefix"
     local lb
     lb="$(aws_ elbv2 describe-load-balancers --names "$load_balancer" --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null || true)"
     if [[ "$lb" != None && -n "$lb" ]]; then
