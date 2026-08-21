@@ -1,32 +1,66 @@
 import type { WalletContextState } from "@solana/wallet-adapter-react";
-import { Connection, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
-import type { Instruction } from "@solana/kit";
+import { Connection, VersionedTransaction } from "@solana/web3.js";
+import {
+  appendTransactionMessageInstruction,
+  compileTransaction,
+  createSolanaRpc,
+  createTransactionMessage,
+  getTransactionEncoder,
+  isTransactionWithBlockhashLifetime,
+  pipe,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
+  type Address,
+  type Instruction,
+  type Transaction,
+} from "@solana/kit";
+import { SOLANA_RPC_URL } from "./config";
 
-// Sends one SDK instruction signed by the connected wallet. The SDK builds kit
-// instructions, the wallet adapter speaks web3.js, so the metas are mapped:
-// kit roles are bit 0 writable, bit 1 signer.
-export async function sendWithWallet(
+export function walletAddress(wallet: WalletContextState): Address | undefined {
+  return wallet.publicKey?.toBase58() as Address | undefined;
+}
+
+export function connectedAddress(wallet: WalletContextState): Address {
+  const address = walletAddress(wallet);
+  if (!address) throw new Error("connect a wallet first");
+  return address;
+}
+
+/** One instruction in a fresh transaction, the wallet pays and signs. */
+export async function sendInstruction(
   wallet: WalletContextState,
-  solanaRpcUrl: string,
   instruction: Instruction,
 ): Promise<string> {
-  if (!wallet.publicKey) throw new Error("connect a wallet first");
-  const connection = new Connection(solanaRpcUrl, "confirmed");
-  const transaction = new Transaction().add(
-    new TransactionInstruction({
-      programId: new PublicKey(instruction.programAddress),
-      keys: (instruction.accounts ?? []).map((meta) => ({
-        pubkey: new PublicKey(meta.address),
-        isSigner: (meta.role & 2) !== 0,
-        isWritable: (meta.role & 1) !== 0,
-      })),
-      data: Buffer.from(instruction.data ?? []),
-    }),
+  const feePayer = connectedAddress(wallet);
+  const { value: blockhash } = await createSolanaRpc(SOLANA_RPC_URL).getLatestBlockhash().send();
+  const transaction = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayer(feePayer, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
+    (m) => appendTransactionMessageInstruction(instruction, m),
+    compileTransaction,
   );
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = wallet.publicKey;
-  const signature = await wallet.sendTransaction(transaction, connection);
-  await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
+  return sendTransaction(wallet, transaction);
+}
+
+/** Signs a kit transaction in the wallet and waits for confirmation. */
+export async function sendTransaction(
+  wallet: WalletContextState,
+  transaction: Transaction,
+): Promise<string> {
+  if (!wallet.signTransaction) throw new Error("the wallet cannot sign transactions");
+  const connection = new Connection(SOLANA_RPC_URL, "confirmed");
+  const wire = new Uint8Array(getTransactionEncoder().encode(transaction));
+  const signed = await wallet.signTransaction(VersionedTransaction.deserialize(wire));
+  const signature = await connection.sendRawTransaction(signed.serialize());
+  // The transaction's own lifetime bounds the wait, a later blockhash would outlive it.
+  const { blockhash, lastValidBlockHeight } = isTransactionWithBlockhashLifetime(transaction)
+    ? transaction.lifetimeConstraint
+    : await connection.getLatestBlockhash();
+  await connection.confirmTransaction({
+    signature,
+    blockhash,
+    lastValidBlockHeight: Number(lastValidBlockHeight),
+  });
   return signature;
 }

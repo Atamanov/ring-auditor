@@ -2,8 +2,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // The SDK is a link: dependency one directory up, so the module graph root
-  // must cover both checkouts.
+  // Turbopack root must cover the linked SDK checkout.
   turbopack: {
     root: path.join(__dirname, ".."),
     // The hasher's browser build inlines its WASM but keeps a `new URL(..)`

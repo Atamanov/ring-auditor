@@ -1,13 +1,10 @@
+import type { WalletContextState } from "@solana/wallet-adapter-react";
 import { readerKeyBytes, type RingReadSigner } from "@heliuslabs/zolana/ring";
-import type { Address } from "@solana/kit";
+import { walletAddress } from "./chain";
 
-export interface MessageWallet {
-  publicKey: { toBase58(): string } | null;
-  signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
-}
-
-export function walletSigner(wallet: MessageWallet): RingReadSigner | undefined {
-  const { publicKey, signMessage } = wallet;
-  if (!publicKey || !signMessage) return undefined;
-  return { reader: readerKeyBytes(publicKey.toBase58() as Address), sign: signMessage };
+export function walletSigner(wallet: WalletContextState): RingReadSigner | undefined {
+  const address = walletAddress(wallet);
+  const { signMessage } = wallet;
+  if (!address || !signMessage) return undefined;
+  return { reader: readerKeyBytes(address), sign: signMessage };
 }

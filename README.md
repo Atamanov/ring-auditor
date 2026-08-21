@@ -97,4 +97,4 @@ against the Rust server by the SDK's tests. The page signs again for every
 request because the cursor and the time are both part of the signature.
 
 The SDK is consumed as a `link:` dependency on the `zolana-ts` checkout next to
-this repository (`npm run build:ts` there refreshes it).
+this repository, `build:ts` there refreshes it.

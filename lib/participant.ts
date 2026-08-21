@@ -1,6 +1,6 @@
 import type { Address } from "@solana/kit";
 import type { PrivateTransaction } from "@heliuslabs/zolana/transaction";
-import type { ShownOutput, ShownTransaction } from "@/components/TransactionCard";
+import type { ShownOutput, ShownTransaction } from "./transactions";
 import type { Synced } from "./shielded";
 
 export interface ParticipantView {

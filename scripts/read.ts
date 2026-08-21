@@ -1,4 +1,3 @@
-// Reads a ring from the command line with the same SDK the page uses.
 //   pnpm read --url http://127.0.0.1:9485 --ring <id> --keypair ~/.config/solana/id.json
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";

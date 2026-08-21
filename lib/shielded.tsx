@@ -1,8 +1,7 @@
 "use client";
 
 import { useWallet, type WalletContextState } from "@solana/wallet-adapter-react";
-import { Connection, VersionedTransaction } from "@solana/web3.js";
-import { getTransactionEncoder, type Address, type Transaction } from "@solana/kit";
+import { isAddress, type Address } from "@solana/kit";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   LocalWalletAuthority,
@@ -17,7 +16,9 @@ import {
   buildRingLookupTableTransaction,
   buildRingTransferTransaction,
 } from "@heliuslabs/zolana/ring";
+import { connectedAddress, sendTransaction, walletAddress } from "./chain";
 import { INDEXER_URL, PROVER_URL, SOLANA_RPC_URL, TREE, type Ring } from "./config";
+import { stored } from "./storage";
 
 type ZolanaClient = Awaited<ReturnType<typeof createZolanaClient>>;
 
@@ -28,19 +29,26 @@ export interface Synced {
   readonly viewingPublicKey: Uint8Array;
 }
 
-// The wallet's shielded side, derived once per connection from its signature
-// over the derivation payload and kept in memory: the nullifier and viewing
-// keys that own its notes. Every action below reuses it, so the wallet is
-// asked for the derivation signature one time.
+/** Derived once per wallet connection, the wallet signs one time. */
 export interface Shielded {
-  readonly authority?: LocalWalletAuthority;
-  readonly balance?: bigint;
-  /** Derives the keys when needed, then returns them. One wallet prompt, once. */
-  derive(): Promise<LocalWalletAuthority>;
+  readonly balance: bigint | undefined;
   sync(): Promise<Synced>;
   refresh(ring: Address): Promise<bigint>;
   deposit(ring: Address, lamports: bigint): Promise<string>;
   transfer(ring: Ring, lamports: bigint): Promise<string>;
+}
+
+interface Session {
+  readonly wallet: Address;
+  readonly authority: LocalWalletAuthority;
+  readonly balance?: bigint;
+}
+
+/** Ref state, read before React re-renders. */
+interface Derived {
+  readonly wallet: Address;
+  readonly authority: LocalWalletAuthority;
+  shielded?: Wallet;
 }
 
 const ShieldedContext = createContext<Shielded | undefined>(undefined);
@@ -53,29 +61,11 @@ export function useShielded(): Shielded {
 
 export function ShieldedProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet();
-  const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
-  // Keyed by wallet, so a switch of wallet drops the previous keys and notes.
-  const [session, setSession] = useState<{
-    wallet?: Address;
-    authority?: LocalWalletAuthority;
-    balance?: bigint;
-  }>({});
-  const authority = session.wallet === walletAddress ? session.authority : undefined;
-  const balance = session.wallet === walletAddress ? session.balance : undefined;
-  const setAuthority = useCallback(
-    (next: LocalWalletAuthority) => setSession({ wallet: walletAddress, authority: next }),
-    [walletAddress],
-  );
-  const setBalance = useCallback(
-    (next: bigint) =>
-      setSession((prev) => (prev.wallet === walletAddress ? { ...prev, balance: next } : prev)),
-    [walletAddress],
-  );
+  const address = walletAddress(wallet);
+  const [session, setSession] = useState<Session>();
+  const current = session?.wallet === address ? session : undefined;
   const clientRef = useRef<Promise<ZolanaClient>>(undefined);
-  const shieldedRef = useRef<{ wallet?: Address; state?: Wallet }>({});
-  // The derived keys, readable before React re-renders: an action that derives
-  // and then syncs in one go must not ask the wallet twice.
-  const authorityRef = useRef<{ wallet?: Address; authority?: LocalWalletAuthority }>({});
+  const derivedRef = useRef<Derived>(undefined);
 
   const client = useCallback(() => {
     clientRef.current ??= createZolanaClient({
@@ -88,50 +78,35 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     return clientRef.current;
   }, []);
 
-  const derive = useCallback(async () => {
-    if (authority) return authority;
-    if (authorityRef.current.wallet === walletAddress && authorityRef.current.authority) {
-      return authorityRef.current.authority;
-    }
+  const derived = useCallback(async (): Promise<Derived> => {
+    const owner = connectedAddress(wallet);
+    if (derivedRef.current?.wallet === owner) return derivedRef.current;
     const { signMessage } = wallet;
-    if (!walletAddress || !signMessage) throw new Error("connect a wallet first");
-    // The client loads Poseidon, which the derived nullifier key hashes with.
+    if (!signMessage) throw new Error("the wallet cannot sign messages");
+    // Poseidon must be loaded before derivation.
     await client();
-    const derived = LocalWalletAuthority.fromDerivationSeed({
-      solanaPublicKey: walletAddress,
+    const authority = LocalWalletAuthority.fromDerivationSeed({
+      solanaPublicKey: owner,
       derivationSeed: await signMessage(ed25519DerivationPayload()),
     });
-    authorityRef.current = { wallet: walletAddress, authority: derived };
-    setAuthority(derived);
-    return derived;
-  }, [authority, client, setAuthority, wallet, walletAddress]);
+    derivedRef.current = { wallet: owner, authority };
+    setSession({ wallet: owner, authority });
+    return derivedRef.current;
+  }, [client, wallet]);
 
-  const shieldedWallet = useCallback(
-    async (auth: LocalWalletAuthority) => {
-      if (shieldedRef.current.wallet !== walletAddress || !shieldedRef.current.state) {
-        shieldedRef.current = {
-          wallet: walletAddress,
-          state: new Wallet({ identity: await auth.shieldedAddress() }),
-        };
-      }
-      return shieldedRef.current.state!;
-    },
-    [walletAddress],
-  );
+  const shieldedWallet = useCallback(async () => {
+    const d = await derived();
+    d.shielded ??= new Wallet({ identity: await d.authority.shieldedAddress() });
+    return { authority: d.authority, shielded: d.shielded, owner: d.wallet };
+  }, [derived]);
 
   const sync = useCallback(async (): Promise<Synced> => {
-    const auth = await derive();
+    const { authority, shielded } = await shieldedWallet();
     const c = await client();
-    const shielded = await shieldedWallet(auth);
     const slot = BigInt(await c.solanaRpc.getSlot().send());
-    await syncWallet({
-      client: c,
-      wallet: shielded,
-      authority: auth,
-      config: { requireSlot: slot },
-    });
+    await syncWallet({ client: c, wallet: shielded, authority, config: { requireSlot: slot } });
     return { wallet: shielded, slot, viewingPublicKey: shielded.identity.viewingPublicKey.toBytes() };
-  }, [client, derive, shieldedWallet]);
+  }, [client, shieldedWallet]);
 
   const refresh = useCallback(
     async (ring: Address) => {
@@ -140,103 +115,93 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
         .utxos()
         .filter((e) => !e.spent && e.utxo.asset === SOL_MINT && e.utxo.zoneProgramId === ring)
         .reduce((sum, e) => sum + e.utxo.amount, 0n);
-      setBalance(total);
+      setSession((prev) => (prev && prev.wallet === address ? { ...prev, balance: total } : prev));
       return total;
     },
-    [setBalance, sync],
+    [address, sync],
   );
 
   const deposit = useCallback(
     async (ring: Address, lamports: bigint) => {
-      const auth = await derive();
-      const c = await client();
-      const signature = await send(
+      const { authority, owner } = await shieldedWallet();
+      const signature = await sendTransaction(
         wallet,
         await buildRingDepositTransaction({
-          client: c,
+          client: await client(),
           ringProgramId: ring,
-          feePayer: walletAddress!,
-          recipient: await auth.shieldedAddress(),
+          feePayer: owner,
+          recipient: await authority.shieldedAddress(),
           amount: lamports,
         }),
       );
       await refresh(ring);
       return signature;
     },
-    [client, derive, refresh, wallet, walletAddress],
+    [client, refresh, shieldedWallet, wallet],
   );
 
   const transfer = useCallback(
-    async (ringEntry: Ring, lamports: bigint) => {
-      const ring = ringEntry.id as Address;
-      const auth = await derive();
+    async (ring: Ring, lamports: bigint) => {
+      const { authority, shielded, owner } = await shieldedWallet();
       const c = await client();
-      const shielded = await shieldedWallet(auth);
-      await refresh(ring);
-      const seed = new Uint8Array(32);
-      crypto.getRandomValues(seed);
-      const recipient = ShieldedKeypair.fromKeypair(SigningKey.fromEd25519Bytes(seed as Bytes32));
-      const signature = await send(
+      await refresh(ring.id);
+      const signature = await sendTransaction(
         wallet,
         await buildRingTransferTransaction({
           client: c,
-          ringProgramId: ring,
+          ringProgramId: ring.id,
           wallet: shielded,
-          authority: auth,
-          feePayer: walletAddress!,
-          recipient: recipient.shieldedAddress(),
+          authority,
+          feePayer: owner,
+          recipient: freshRecipient(),
           amount: lamports,
-          lookupTable: await lookupTable(c, ringEntry, wallet),
+          lookupTable: await lookupTable(c, ring, wallet),
         }),
       );
-      await refresh(ring);
+      await refresh(ring.id);
       return signature;
     },
-    [client, derive, refresh, shieldedWallet, wallet, walletAddress],
+    [client, refresh, shieldedWallet, wallet],
   );
 
   const value = useMemo<Shielded>(
-    () => ({ authority, balance, derive, sync, refresh, deposit, transfer }),
-    [authority, balance, derive, sync, refresh, deposit, transfer],
+    () => ({ balance: current?.balance, sync, refresh, deposit, transfer }),
+    [current?.balance, sync, refresh, deposit, transfer],
   );
   return <ShieldedContext.Provider value={value}>{children}</ShieldedContext.Provider>;
 }
 
-// Signs a kit transaction in the wallet and waits for confirmation.
-async function send(wallet: WalletContextState, transaction: Transaction): Promise<string> {
-  if (!wallet.signTransaction) throw new Error("the wallet cannot sign transactions");
-  const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-  const wire = new Uint8Array(getTransactionEncoder().encode(transaction));
-  const signed = await wallet.signTransaction(VersionedTransaction.deserialize(wire));
-  const signature = await connection.sendRawTransaction(signed.serialize());
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-  await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight });
-  return signature;
+function freshRecipient() {
+  const seed = new Uint8Array(32);
+  crypto.getRandomValues(seed);
+  return ShieldedKeypair.fromKeypair(SigningKey.fromEd25519Bytes(seed as Bytes32)).shieldedAddress();
 }
 
-// The ring's lookup table is the operator's, named on the ring entry. A ring
-// without one gets a table created with the wallet, remembered for this ring.
+const createdTable = (ring: Address) =>
+  stored<Address | undefined>(`ring-auditor.lookup-table.${ring}`, (raw) =>
+    typeof raw === "string" && isAddress(raw) ? raw : undefined,
+  );
+
 async function lookupTable(
   client: ZolanaClient,
-  ringEntry: Ring,
+  ring: Ring,
   wallet: WalletContextState,
 ): Promise<Address> {
-  if (ringEntry.lookupTable?.trim()) return ringEntry.lookupTable.trim() as Address;
-  const ring = ringEntry.id as Address;
-  const key = `ring-auditor.lookup-table.${ring}`;
-  const known = localStorage.getItem(key);
-  if (known) return known as Address;
+  if (ring.lookupTable) return ring.lookupTable;
+  const created = createdTable(ring.id);
+  const existing = created.load();
+  if (existing) return existing;
   const table = await buildRingLookupTableTransaction({
     client,
-    ringProgramId: ring,
-    feePayer: wallet.publicKey!.toBase58() as Address,
+    ringProgramId: ring.id,
+    feePayer: connectedAddress(wallet),
   });
-  await send(wallet, table.transaction);
+  await sendTransaction(wallet, table.transaction);
   // A lookup table serves transactions only from the slot after its writes.
   const writtenAt = await client.solanaRpc.getSlot().send();
   while ((await client.solanaRpc.getSlot().send()) <= writtenAt) {
     await new Promise((resolve) => setTimeout(resolve, 400));
   }
-  localStorage.setItem(key, table.address);
+  created.save(table.address);
   return table.address;
 }

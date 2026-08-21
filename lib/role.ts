@@ -7,59 +7,54 @@ import {
   readerRecordAddress,
   ringConfigAddress,
   type ReaderKey,
+  type RingProgramConfig,
   type RingRpcHealth,
 } from "@heliuslabs/zolana/ring";
+import { SOLANA_RPC_URL } from "./config";
 
 export type RingRole = "authority" | "delegated reader" | "participant only";
 
-export async function ringRole(
-  solanaRpcUrl: string,
-  ring: Address,
-  reader: ReaderKey,
-): Promise<RingRole> {
-  const rpc = createSolanaRpc(solanaRpcUrl);
-  const [config, record] = await Promise.all([
+type Rpc = ReturnType<typeof createSolanaRpc>;
+type EncodedAccount = { readonly owner: Address; readonly data: readonly [string, string] } | null | undefined;
+
+export async function ringRole(ring: Address, reader: ReaderKey): Promise<RingRole> {
+  const rpc = createSolanaRpc(SOLANA_RPC_URL);
+  const [configAddress, recordAddress] = await Promise.all([
     ringConfigAddress(ring),
     readerRecordAddress(ring, reader),
   ]);
   const { value } = await rpc
-    .getMultipleAccounts([config, record], { encoding: "base64" })
+    .getMultipleAccounts([configAddress, recordAddress], { encoding: "base64" })
     .send();
   const [configAccount, recordAccount] = value;
-  if (!configAccount || configAccount.owner !== ring) {
-    throw new Error("ring has no config on chain");
-  }
-  const base64 = getBase64Encoder();
-  const authority = decodeRingProgramConfig(
-    new Uint8Array(base64.encode(configAccount.data[0])),
-  ).authority;
-  if (readerKeyEquals(authority, reader)) return "authority";
-  if (
-    recordAccount &&
-    recordAccount.owner === ring &&
-    readerKeyEquals(
-      decodeReaderRecord(new Uint8Array(base64.encode(recordAccount.data[0]))).reader,
-      reader,
-    )
-  ) {
+  const config = decodeRingProgramConfig(requireConfig(ownedData(configAccount, ring)));
+  if (readerKeyEquals(config.authority, reader)) return "authority";
+  const record = ownedData(recordAccount, ring);
+  if (record && readerKeyEquals(decodeReaderRecord(record).reader, reader)) {
     return "delegated reader";
   }
   return "participant only";
 }
 
-// A local-mode ring RPC serves one ring and ignores the ring id in requests,
-// so a page pointed at the wrong RPC would show another ring's transactions.
-// The auditor tag the RPC reports has to be the one the ring's config names.
-export async function servesRing(
-  solanaRpcUrl: string,
-  ring: Address,
-  health: RingRpcHealth,
-): Promise<boolean> {
-  if (!health.auditorViewTag) return true;
-  const rpc = createSolanaRpc(solanaRpcUrl);
+/** The RPC's auditor tag must match the ring config. */
+export async function servesRing(ring: Address, health: RingRpcHealth): Promise<boolean> {
+  const tag = health.auditorViewTag;
+  if (!tag) return true;
+  const config = await ringConfig(createSolanaRpc(SOLANA_RPC_URL), ring);
+  return auditorViewTag(config.auditorPublicKey).every((byte, index) => byte === tag[index]);
+}
+
+async function ringConfig(rpc: Rpc, ring: Address): Promise<RingProgramConfig> {
   const { value } = await rpc.getAccountInfo(await ringConfigAddress(ring), { encoding: "base64" }).send();
-  if (!value || value.owner !== ring) return false;
-  const config = decodeRingProgramConfig(new Uint8Array(getBase64Encoder().encode(value.data[0])));
-  const expected = auditorViewTag(config.auditorPublicKey);
-  return expected.every((byte, index) => byte === health.auditorViewTag![index]);
+  return decodeRingProgramConfig(requireConfig(ownedData(value, ring)));
+}
+
+function ownedData(account: EncodedAccount, owner: Address): Uint8Array | undefined {
+  if (!account || account.owner !== owner) return undefined;
+  return new Uint8Array(getBase64Encoder().encode(account.data[0]));
+}
+
+function requireConfig(data: Uint8Array | undefined): Uint8Array {
+  if (!data) throw new Error("ring has no config on chain");
+  return data;
 }

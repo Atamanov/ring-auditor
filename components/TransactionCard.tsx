@@ -1,24 +1,8 @@
+import type { ReactNode } from "react";
 import { explorerTxUrl } from "@/lib/config";
-import { formatAmount, isSol, toBase58, toHex } from "@/lib/format";
+import { formatAmount, isSol, shortKey, toBase58, toHex } from "@/lib/format";
+import type { ShownTransaction } from "@/lib/transactions";
 import { Key } from "./ui";
-
-export interface ShownOutput {
-  readonly slotIndex: number;
-  readonly recipientViewingPublicKey: Uint8Array;
-  readonly asset: string;
-  readonly amount: bigint;
-  readonly spent?: boolean;
-}
-
-/** The fields the card renders, a `DecryptedRingTransaction` fits as is. */
-export interface ShownTransaction {
-  readonly signature: string;
-  readonly slot: bigint;
-  readonly signers: readonly string[];
-  readonly outputs: readonly ShownOutput[];
-  readonly undecryptableSlots: readonly number[];
-  readonly nullifiers: readonly Uint8Array[];
-}
 
 export function TransactionCard({ tx }: { tx: ShownTransaction }) {
   return (
@@ -32,7 +16,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
             title={`${tx.signature}\nopen in Solana Explorer`}
             className="font-mono text-xs underline decoration-line underline-offset-2 hover:text-accent"
           >
-            {tx.signature.slice(0, 8)}…{tx.signature.slice(-8)}
+            {shortKey(tx.signature, 8, 8)}
           </a>
           <Key value={tx.signature} head={0} tail={0} />
         </span>
@@ -86,7 +70,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted">{label}</span>

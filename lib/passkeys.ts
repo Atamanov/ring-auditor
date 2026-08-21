@@ -1,29 +1,28 @@
 import { base64urlnopad, hex } from "@scure/base";
 import { P256PublicKey, type Bytes33 } from "@heliuslabs/zolana/keypair";
 import { createPasskey, passkeyReader, type Passkey, type RingReadSigner } from "@heliuslabs/zolana/ring";
+import { asRecord, stored } from "./storage";
 
-// A registered passkey as the page remembers it. Only public data: the
-// credential id names the key on the authenticator, the public key is what the
-// authority grants.
+/** Public data only. */
 export interface StoredPasskey {
-  label: string;
-  credentialId: string;
-  publicKey: string;
+  readonly label: string;
+  readonly credentialId: string;
+  readonly publicKey: string;
 }
 
-const STORAGE = "ring-auditor.passkeys";
+const HEX_33_BYTES = /^[0-9a-f]{66}$/;
 
-export function loadPasskeys(): StoredPasskey[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE) ?? "[]") as StoredPasskey[];
-  } catch {
-    return [];
-  }
-}
-
-export function savePasskeys(passkeys: StoredPasskey[]): void {
-  localStorage.setItem(STORAGE, JSON.stringify(passkeys));
-}
+export const passkeyStore = stored<readonly StoredPasskey[]>("ring-auditor.passkeys", (raw) =>
+  (Array.isArray(raw) ? raw : []).flatMap((entry: unknown) => {
+    const p = asRecord(entry);
+    return typeof p.label === "string" &&
+      typeof p.credentialId === "string" &&
+      typeof p.publicKey === "string" &&
+      HEX_33_BYTES.test(p.publicKey)
+      ? [{ label: p.label, credentialId: p.credentialId, publicKey: p.publicKey }]
+      : [];
+  }),
+);
 
 export async function registerPasskey(label: string): Promise<StoredPasskey> {
   const passkey = await createPasskey({ rpName: "Ring Auditor", userName: label });

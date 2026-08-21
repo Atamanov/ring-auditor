@@ -1,100 +1,61 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Address } from "@solana/kit";
 import {
   grantReaderInstruction,
   parseReaderKey,
-  readerKeyToString,
   revokeReaderInstruction,
-  type ReaderKey,
 } from "@heliuslabs/zolana/ring";
-import { sendWithWallet } from "@/lib/chain";
-import { passkeyPublicKey, registerPasskey, type StoredPasskey } from "@/lib/passkeys";
+import { sendInstruction, walletAddress } from "@/lib/chain";
+import { useAction, useLoaded, useRefreshToken } from "@/lib/hooks";
+import { registerPasskey, type StoredPasskey } from "@/lib/passkeys";
 import { ringRole, type RingRole } from "@/lib/role";
-import { SOLANA_RPC_URL } from "@/lib/config";
 import { GrantRequest } from "./GrantRequest";
-import { Badge, Button, Card, Field, Key } from "./ui";
+import { Badge, Button, Card, Failure, Field, Hint, IconButton, Key } from "./ui";
 
-function errorMessage(e: unknown): string {
-  const details = (e as { details?: { message?: string } }).details;
-  return details?.message ?? (e as Error).message;
-}
-
-// Passkeys this browser registered, and the authority's grant controls. A key
-// pasted from another machine can be granted here too, the list stays local.
 export function Passkeys({
-  ring: ringId,
+  ring,
   passkeys,
   onChange,
 }: {
-  ring: string;
-  passkeys: StoredPasskey[];
-  onChange: (passkeys: StoredPasskey[]) => void;
+  ring: Address | undefined;
+  passkeys: readonly StoredPasskey[];
+  onChange: (passkeys: readonly StoredPasskey[]) => void;
 }) {
   const wallet = useWallet();
+  const authority = walletAddress(wallet);
   const [label, setLabel] = useState("");
   const [pasted, setPasted] = useState("");
-  const [roles, setRoles] = useState<Record<string, RingRole>>({});
-  const [walletRole, setWalletRole] = useState<RingRole>();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  // Grants happen elsewhere (terminal, another browser), so the roles reload on
-  // demand and whenever the tab comes back into focus.
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const bump = () => setTick((n) => n + 1);
-    window.addEventListener("focus", bump);
-    return () => window.removeEventListener("focus", bump);
-  }, []);
+  const { busy, error, run } = useAction();
+  const [token, reload] = useRefreshToken();
 
-  const walletAddress = wallet.publicKey?.toBase58() as Address | undefined;
-  const ring = ringId as Address;
-  const keys = passkeys.map((p) => readerKeyToString(passkeyPublicKey(p))).join(",");
-
-  useEffect(() => {
-    if (!ringId) return;
-    let live = true;
-    const readers: ReaderKey[] = keys ? keys.split(",").map(parseReaderKey) : [];
-    Promise.all(readers.map((reader) => ringRole(SOLANA_RPC_URL, ring, reader)))
-      .then((found) => {
-        if (!live) return;
-        setRoles(Object.fromEntries(readers.map((r, i) => [readerKeyToString(r), found[i]!])));
-      })
-      .catch(() => live && setRoles({}));
-    if (walletAddress) {
-      ringRole(SOLANA_RPC_URL, ring, walletAddress)
-        .then((r) => live && setWalletRole(r))
-        .catch(() => live && setWalletRole(undefined));
-    }
-    return () => {
-      live = false;
-    };
-  }, [ringId, ring, keys, walletAddress, busy, tick]);
-
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await action();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const roles = useLoaded(
+    ring && { ring, token, keys: passkeys.map((p) => p.publicKey) },
+    async ({ ring, keys }) =>
+      new Map(
+        await Promise.all(keys.map(async (key) => [key, await ringRole(ring, parseReaderKey(key))] as const)),
+      ),
+  );
+  const walletRole = useLoaded(ring && authority && { ring, token, authority }, ({ ring, authority }) =>
+    ringRole(ring, authority),
+  );
+  const isAuthority = walletRole.status === "ready" && walletRole.value === "authority";
+  const roleOf = (p: StoredPasskey): RingRole | undefined =>
+    roles.status === "ready" ? roles.value.get(p.publicKey) : undefined;
 
   const create = () =>
-    run(async () => {
+    run("create", async () => {
       const passkey = await registerPasskey(label || `passkey ${passkeys.length + 1}`);
       onChange([...passkeys, passkey]);
       setLabel("");
     });
 
-  const grant = (reader: ReaderKey, revoke: boolean) =>
-    run(async () => {
-      const authority = walletAddress!;
+  const grant = (readerText: string, revoke: boolean) =>
+    run("grant", async () => {
+      if (!ring || !authority) throw new Error("connect the authority wallet first");
+      const reader = parseReaderKey(readerText);
       const instruction = revoke
         ? await revokeReaderInstruction({
             ringProgramId: ring,
@@ -103,67 +64,39 @@ export function Passkeys({
             rentRecipient: authority,
           })
         : await grantReaderInstruction({ ringProgramId: ring, payer: authority, authority, reader });
-      await sendWithWallet(wallet, SOLANA_RPC_URL, instruction);
+      await sendInstruction(wallet, instruction);
       setPasted("");
+      reload();
     });
-
-  const isAuthority = walletRole === "authority";
-  const controls = (reader: ReaderKey) => {
-    const granted = roles[readerKeyToString(reader)] === "delegated reader";
-    return (
-      <div className="flex items-center gap-2">
-        <Badge>{roles[readerKeyToString(reader)] ?? "…"}</Badge>
-        {isAuthority && (
-          <Button onClick={() => grant(reader, granted)} disabled={busy || !ringId}>
-            {granted ? "Revoke" : "Grant"}
-          </Button>
-        )}
-      </div>
-    );
-  };
 
   return (
     <Card
       title={
         <span className="flex items-center gap-2">
           Passkeys
-          <button
-            onClick={() => setTick((n) => n + 1)}
-            title="Reload grant status"
-            className="text-xs text-muted hover:text-text"
-          >
+          <IconButton title="Reload grant status" onClick={reload}>
             ↻
-          </button>
+          </IconButton>
         </span>
       }
     >
-      <p className="text-xs text-muted">
+      <Hint>
         A passkey (Touch ID, YubiKey) reads the ring once the authority grants its key. Copy the
         key to the authority, or grant it here with the authority wallet.
-      </p>
+      </Hint>
       {passkeys.map((p) => (
-        <div key={p.credentialId} className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-col">
-            <span className="text-sm">{p.label}</span>
-            <Key value={p.publicKey} />
-          </div>
-          <div className="flex items-center gap-2">
-            {controls(passkeyPublicKey(p))}
-            {roles[p.publicKey] !== "delegated reader" && (
-              <GrantRequest label={p.label} readerKey={p.publicKey} />
-            )}
-            <button
-              onClick={() => onChange(passkeys.filter((q) => q.credentialId !== p.credentialId))}
-              className="text-xs text-muted hover:text-text"
-            >
-              forget
-            </button>
-          </div>
-        </div>
+        <PasskeyRow
+          key={p.credentialId}
+          passkey={p}
+          role={roleOf(p)}
+          canGrant={isAuthority && !busy}
+          onGrant={(revoke) => grant(p.publicKey, revoke)}
+          onForget={() => onChange(passkeys.filter((q) => q.credentialId !== p.credentialId))}
+        />
       ))}
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Label" value={label} onChange={(e) => setLabel(e.target.value)} />
-        <Button onClick={create} disabled={busy}>
+        <Button onClick={create} disabled={!!busy}>
           Create passkey
         </Button>
       </div>
@@ -174,15 +107,44 @@ export function Passkeys({
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
           />
-          <Button
-            onClick={() => grant(parseReaderKey(pasted), false)}
-            disabled={busy || !pasted.trim()}
-          >
+          <Button onClick={() => grant(pasted, false)} disabled={!!busy || !pasted.trim()}>
             Grant
           </Button>
         </div>
       )}
-      {error && <span className="text-sm text-accent-hover">{error}</span>}
+      {error && <Failure>{error}</Failure>}
     </Card>
+  );
+}
+
+function PasskeyRow({
+  passkey,
+  role,
+  canGrant,
+  onGrant,
+  onForget,
+}: {
+  passkey: StoredPasskey;
+  role: RingRole | undefined;
+  canGrant: boolean;
+  onGrant: (revoke: boolean) => void;
+  onForget: () => void;
+}) {
+  const granted = role === "delegated reader";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col">
+        <span className="text-sm">{passkey.label}</span>
+        <Key value={passkey.publicKey} />
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge>{role ?? "…"}</Badge>
+        {canGrant && <Button onClick={() => onGrant(granted)}>{granted ? "Revoke" : "Grant"}</Button>}
+        {!granted && <GrantRequest label={passkey.label} readerKey={passkey.publicKey} />}
+        <IconButton title="Forget this passkey" onClick={onForget}>
+          forget
+        </IconButton>
+      </div>
+    </div>
   );
 }
