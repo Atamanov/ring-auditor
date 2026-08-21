@@ -8,6 +8,7 @@ const hasherEntry = createRequire(path.join(sdk, "package.json")).resolve("@ligh
 const hasher = hasherEntry.slice(0, hasherEntry.indexOf(`${path.sep}dist${path.sep}`));
 
 const nextConfig: NextConfig = {
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   turbopack: {
     // The hasher's browser build inlines its WASM but keeps a `new URL(..)`
     // fallback the bundler resolves against the wrong directory.
