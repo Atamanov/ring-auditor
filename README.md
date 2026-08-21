@@ -23,12 +23,13 @@ with one `signMessage` over the bare derivation payload `TSPP/derive/v1`
 The Ring card lists named rings, `+` adds one (name, program id, its RPC),
 `×` removes the selected one, and shows the wallet's balance
 on the ring with **Deposit** (shield SOL from the wallet), **Transfer** (an
-audited transfer inside the ring to a registered recipient's shielded address)
+audited transfer inside the ring, the recipient's Solana address is asked in a
+modal and resolves to its registered shielded address)
 and **Burn** (the same transfer to a key nobody holds), each one wallet
 signature. Failures show as toasts. The wallet's shielded keys are derived once per connection from its
 signature over `TSPP/derive/v1` and reused by every action and the Participant
-view. The ring's lookup table is the operator's, named on the ring entry; a ring
-without one gets a table created with the wallet on the first transfer or burn.
+view. The ring's lookup table is created with the wallet on the first transfer
+or burn and remembered per ring.
 Service URLs are deployment settings in `.env.local` (see `.env.example`).
 
 ## Delegating reads

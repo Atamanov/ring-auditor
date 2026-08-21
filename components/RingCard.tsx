@@ -3,7 +3,7 @@
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { address, isAddress, type Address } from "@solana/kit";
+import { isAddress, type Address } from "@solana/kit";
 import { RingRpc } from "@heliuslabs/zolana/ring";
 import { walletAddress } from "@/lib/chain";
 import {
@@ -19,7 +19,7 @@ import { formatAmount, parseSol, shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
 import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
-import { Badge, Button, Caption, Card, Field, Hint, IconButton, Mono, Select } from "./ui";
+import { Badge, Button, Caption, Card, Field, Hint, IconButton, Modal, Mono, Select } from "./ui";
 
 export function RingCard({
   selection,
@@ -96,10 +96,9 @@ interface Draft {
   name: string;
   id: string;
   rpc: string;
-  lookupTable: string;
 }
 
-const EMPTY: Draft = { name: "", id: "", rpc: "", lookupTable: "" };
+const EMPTY: Draft = { name: "", id: "", rpc: "" };
 
 function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
   const [draft, setDraft] = useState(EMPTY);
@@ -110,15 +109,12 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
     const name = draft.name.trim();
     const id = draft.id.trim();
     const rpc = draft.rpc.trim();
-    const lookupTable = draft.lookupTable.trim();
     if (!name) return toast.error("a name is required");
     if (!isAddress(id)) return toast.error("the ring program id is not a Solana address");
-    if (lookupTable && !isAddress(lookupTable)) return toast.error("the lookup table is not a Solana address");
     onAdd({
       name,
       id,
       ...(rpc ? { rpc } : {}),
-      ...(lookupTable ? { lookupTable: address(lookupTable) } : {}),
     });
     setDraft(EMPTY);
   }
@@ -128,12 +124,6 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
       <Field label="Name" value={draft.name} onChange={set("name")} />
       <Field label="Ring program id" value={draft.id} onChange={set("id")} />
       <Field label="Ring RPC URL" value={draft.rpc} placeholder={RING_RPC_URL} onChange={set("rpc")} />
-      <Field
-        label="Lookup table, optional"
-        value={draft.lookupTable}
-        placeholder="created on first transfer"
-        onChange={set("lookupTable")}
-      />
       <Button onClick={submit}>Add</Button>
     </div>
   );
@@ -170,10 +160,9 @@ function ShieldedActions({ ring }: { ring: Ring }) {
   const wallet = useWallet();
   const shielded = useShielded();
   const [amount, setAmount] = useState("0.05");
-  const [recipient, setRecipient] = useState("");
+  const [transferring, setTransferring] = useState(false);
   const { busy, run } = useAction<Move>();
   const lamports = parseSol(amount);
-  const to = recipient.trim();
   const canAct = !busy && !!walletAddress(wallet);
   const canMove = canAct && lamports !== undefined;
 
@@ -207,6 +196,13 @@ function ShieldedActions({ ring }: { ring: Ring }) {
           {busy === "deposit" ? "Depositing…" : "Deposit"}
         </Button>
         <Button
+          onClick={() => setTransferring(true)}
+          disabled={!canMove}
+          title="Audited transfer inside the ring to the recipient's shielded address"
+        >
+          {busy === "transfer" ? "Proving…" : "Transfer"}
+        </Button>
+        <Button
           onClick={() => lamports && move("burn", () => shielded.burn(ring, lamports).then(sent("burned")))}
           disabled={!canMove}
           title="Audited transfer inside the ring to a key nobody holds"
@@ -214,28 +210,57 @@ function ShieldedActions({ ring }: { ring: Ring }) {
           {busy === "burn" ? "Proving…" : "Burn"}
         </Button>
       </div>
-      <div className="flex flex-wrap items-end gap-3">
-        <Field
-          label="Recipient, Solana address"
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value)}
-          placeholder="a registered shielded user"
+      {transferring && lamports !== undefined && (
+        <TransferModal
+          ring={ring}
+          lamports={lamports}
+          onClose={() => setTransferring(false)}
+          onConfirm={(to) => {
+            setTransferring(false);
+            void move("transfer", () => shielded.transfer(ring, lamports, to).then(sent("transferred")));
+          }}
         />
+      )}
+    </>
+  );
+}
+
+function TransferModal({
+  ring,
+  lamports,
+  onClose,
+  onConfirm,
+}: {
+  ring: Ring;
+  lamports: bigint;
+  onClose: () => void;
+  onConfirm: (to: Address) => void;
+}) {
+  const [recipient, setRecipient] = useState("");
+  const to = recipient.trim();
+  return (
+    <Modal title={`Transfer ${formatAmount(lamports)} inside ${ring.name}`} onClose={onClose}>
+      <p className="text-sm">
+        The recipient&apos;s Solana address resolves to its registered shielded address. The note stays
+        in the ring and the auditor can read it.
+      </p>
+      <Field
+        label="Recipient, Solana address"
+        value={recipient}
+        onChange={(e) => setRecipient(e.target.value)}
+        placeholder="a registered shielded user"
+        autoFocus
+      />
+      <div className="flex justify-end">
         <Button
           onClick={() =>
-            lamports &&
-            move("transfer", () =>
-              isAddress(to)
-                ? shielded.transfer(ring, lamports, to).then(sent("transferred"))
-                : Promise.reject(new Error("the recipient is not a Solana address")),
-            )
+            isAddress(to) ? onConfirm(to) : toast.error("the recipient is not a Solana address")
           }
-          disabled={!canMove || !to}
-          title="Audited transfer inside the ring to the recipient's shielded address"
+          disabled={!to}
         >
-          {busy === "transfer" ? "Proving…" : "Transfer"}
+          Sign and transfer
         </Button>
       </div>
-    </>
+    </Modal>
   );
 }
