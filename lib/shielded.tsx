@@ -24,6 +24,7 @@ import {
 } from "@heliuslabs/zolana/ring";
 import { connectedAddress, sendTransaction, walletAddress } from "./chain";
 import { INDEXER_URL, PROVER_URL, SOLANA_RPC_URL, TREE, type Ring } from "./config";
+import type { Recipient } from "./address";
 import { stored } from "./storage";
 
 type ZolanaClient = Awaited<ReturnType<typeof createZolanaClient>>;
@@ -38,10 +39,12 @@ export interface Synced {
 /** Derived once per wallet connection, the wallet signs one time. */
 export interface Shielded {
   readonly balance: bigint | undefined;
+  /** Where transfers to this wallet land, set once the keys are derived. */
+  readonly address: ShieldedAddress | undefined;
   sync(): Promise<Synced>;
   refresh(ring: Address): Promise<bigint>;
   deposit(ring: Address, lamports: bigint): Promise<string>;
-  transfer(ring: Ring, lamports: bigint, recipient: Address): Promise<string>;
+  transfer(ring: Ring, lamports: bigint, recipient: Recipient): Promise<string>;
   /** A transfer to a key nobody holds. */
   burn(ring: Ring, lamports: bigint): Promise<string>;
 }
@@ -49,6 +52,7 @@ export interface Shielded {
 interface Session {
   readonly wallet: Address;
   readonly authority: LocalWalletAuthority;
+  readonly address: ShieldedAddress;
   readonly balance?: bigint;
 }
 
@@ -98,7 +102,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
       derivationSeed: await signMessage(ed25519DerivationPayload()),
     });
     derivedRef.current = { wallet: owner, authority };
-    setSession({ wallet: owner, authority });
+    setSession({ wallet: owner, authority, address: await authority.shieldedAddress() });
     return derivedRef.current;
   }, [client, wallet]);
 
@@ -148,8 +152,8 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     [client, refresh, shieldedWallet, wallet],
   );
 
-  const transferTo = useCallback(
-    async (ring: Ring, lamports: bigint, recipient: Address | ShieldedAddress) => {
+  const transfer = useCallback(
+    async (ring: Ring, lamports: bigint, recipient: Recipient) => {
       const { authority, shielded, owner } = await shieldedWallet();
       const c = await client();
       await refresh(ring.id);
@@ -172,18 +176,22 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     [client, refresh, shieldedWallet, wallet],
   );
 
-  const transfer = useCallback(
-    (ring: Ring, lamports: bigint, recipient: Address) => transferTo(ring, lamports, recipient),
-    [transferTo],
-  );
   const burn = useCallback(
-    (ring: Ring, lamports: bigint) => transferTo(ring, lamports, freshRecipient()),
-    [transferTo],
+    (ring: Ring, lamports: bigint) => transfer(ring, lamports, freshRecipient()),
+    [transfer],
   );
 
   const value = useMemo<Shielded>(
-    () => ({ balance: current?.balance, sync, refresh, deposit, transfer, burn }),
-    [current?.balance, sync, refresh, deposit, transfer, burn],
+    () => ({
+      balance: current?.balance,
+      address: current?.address,
+      sync,
+      refresh,
+      deposit,
+      transfer,
+      burn,
+    }),
+    [current?.balance, current?.address, sync, refresh, deposit, transfer, burn],
   );
   return <ShieldedContext.Provider value={value}>{children}</ShieldedContext.Provider>;
 }

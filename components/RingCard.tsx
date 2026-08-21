@@ -15,11 +15,12 @@ import {
   type Ring,
   type RingSelection,
 } from "@/lib/config";
+import { encodeShieldedAddress, parseRecipient, type Recipient } from "@/lib/address";
 import { formatAmount, parseSol, shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
 import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
-import { Badge, Button, Caption, Card, Field, Hint, IconButton, Modal, Mono, Select } from "./ui";
+import { Badge, Button, Caption, Card, Field, Hint, IconButton, Key, Modal, Mono, Select } from "./ui";
 
 export function RingCard({
   selection,
@@ -181,6 +182,12 @@ function ShieldedActions({ ring }: { ring: Ring }) {
             {shielded.balance === undefined ? "—" : formatAmount(shielded.balance)}
           </span>
         </div>
+        {shielded.address && (
+          <div className="flex flex-col gap-1 text-sm">
+            <Caption>Shielded address</Caption>
+            <Key value={encodeShieldedAddress(shielded.address)} head={8} tail={8} />
+          </div>
+        )}
         <Button
           onClick={() => move("refresh", () => shielded.refresh(ring.id).then(() => "synced"))}
           disabled={!canAct}
@@ -234,29 +241,29 @@ function TransferModal({
   ring: Ring;
   lamports: bigint;
   onClose: () => void;
-  onConfirm: (to: Address) => void;
+  onConfirm: (to: Recipient) => void;
 }) {
   const [recipient, setRecipient] = useState("");
-  const to = recipient.trim();
+  const to = parseRecipient(recipient);
   return (
     <Modal title={`Transfer ${formatAmount(lamports)} inside ${ring.name}`} onClose={onClose}>
       <p className="text-sm">
-        The recipient&apos;s Solana address resolves to its registered shielded address. The note stays
-        in the ring and the auditor can read it.
+        A shielded address, as shown under the balance, needs no registration. A Solana address
+        works once its owner registered on chain. The note stays in the ring and the auditor can
+        read it.
       </p>
       <Field
-        label="Recipient, Solana address"
+        label="Recipient, shielded or Solana address"
         value={recipient}
         onChange={(e) => setRecipient(e.target.value)}
-        placeholder="a registered shielded user"
         autoFocus
       />
       <div className="flex justify-end">
         <Button
           onClick={() =>
-            isAddress(to) ? onConfirm(to) : toast.error("the recipient is not a Solana address")
+            to ? onConfirm(to) : toast.error("the recipient is not a shielded or Solana address")
           }
-          disabled={!to}
+          disabled={!recipient.trim()}
         >
           Sign and transfer
         </Button>

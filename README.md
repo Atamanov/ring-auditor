@@ -23,8 +23,8 @@ with one `signMessage` over the bare derivation payload `TSPP/derive/v1`
 The Ring card lists named rings, `+` adds one (name, program id, its RPC),
 `×` removes the selected one, and shows the wallet's balance
 on the ring with **Deposit** (shield SOL from the wallet), **Transfer** (an
-audited transfer inside the ring, the recipient's Solana address is asked in a
-modal and resolves to its registered shielded address)
+audited transfer inside the ring, the recipient is asked in a modal, a shielded
+address as shown under the balance, or the Solana address of a registered user)
 and **Burn** (the same transfer to a key nobody holds), each one wallet
 signature. Failures show as toasts. The wallet's shielded keys are derived once per connection from its
 signature over `TSPP/derive/v1` and reused by every action and the Participant
