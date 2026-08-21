@@ -1,6 +1,5 @@
-# Built with the Zolana TS SDK packed into .sdk/ by tools/rings-test-deploy.sh,
-# the package.json link to the checkout is rewritten to that tarball.
-FROM public.ecr.aws/docker/library/node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS builder
+# The SDK dependency is a pinned zolana commit built from source on install.
+FROM public.ecr.aws/docker/library/node:24-bookworm@sha256:934240a162082fd8b8a2f90cd5114446443f1eba1c5378f6687167ca405e6584 AS builder
 
 ARG NEXT_PUBLIC_RING_RPC_URL
 ARG NEXT_PUBLIC_SOLANA_RPC_URL
@@ -17,12 +16,9 @@ ENV NEXT_PUBLIC_RING_RPC_URL=$NEXT_PUBLIC_RING_RPC_URL \
 
 RUN corepack enable
 WORKDIR /app
-COPY package.json ./
-COPY .sdk/ .sdk/
+COPY package.json pnpm-lock.yaml .npmrc ./
 # Next standalone traces real paths, pnpm symlinks break it.
-RUN echo "node-linker=hoisted" > .npmrc \
-    && sed -i 's#"link:[^"]*"#"file:.sdk/heliuslabs-zolana.tgz"#' package.json \
-    && pnpm install --no-frozen-lockfile
+RUN echo "node-linker=hoisted" >> .npmrc && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
