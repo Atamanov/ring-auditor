@@ -11,7 +11,9 @@ export interface ShownOutput {
 
 /** A public settlement leg, so value that left the ring in the clear. */
 export interface ShownWithdrawal {
+  /** A token account for an SPL leg, a wallet for a SOL leg. */
   readonly recipient: string;
+  readonly asset: string;
   readonly amount: bigint;
 }
 
@@ -34,7 +36,7 @@ export function searchText(tx: ShownTransaction): string {
     tx.signature,
     tx.slot.toString(),
     tx.sender ?? "",
-    ...(tx.withdrawals ?? []).map((w) => w.recipient),
+    ...(tx.withdrawals ?? []).flatMap((w) => [w.recipient, w.asset]),
     ...tx.signers,
     ...tx.outputs.flatMap((o) => [
       o.recipient ?? "",

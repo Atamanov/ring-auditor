@@ -1,6 +1,6 @@
 import { createSolanaRpc, type Address, type Signature } from "@solana/kit";
 import { fetchTransactionSlots, type TransactionSlots } from "@heliuslabs/zolana";
-import { confirmedWithdrawalRecipients } from "@heliuslabs/zolana/ring";
+import { confirmedRingWithdrawals, ORIGIN_TRANSACTION_CONFIG } from "@heliuslabs/zolana/ring";
 import type { PrivateTransaction } from "@heliuslabs/zolana/transaction";
 import type { ShownOutput, ShownTransaction, ShownWithdrawal } from "./transactions";
 import { SOLANA_RPC_URL } from "./config";
@@ -15,20 +15,28 @@ export interface ParticipantView {
 export type WithdrawnTo = ReadonlyMap<string, string>;
 
 /** The account a public withdrawal credited, per signature. */
-export async function withdrawalRecipients(synced: Synced): Promise<WithdrawnTo> {
+export async function withdrawalRecipients(synced: Synced, ring?: Address): Promise<WithdrawnTo> {
   const rpc = createSolanaRpc(SOLANA_RPC_URL);
+  // A settlement leg is named by the ring that signed the pool call, so with no
+  // ring given every ring the wallet holds a note of is tried.
+  const rings = ring
+    ? [ring]
+    : [
+        ...new Set(
+          synced.wallet
+            .utxos()
+            .flatMap((entry) => (entry.utxo.zoneProgramId ? [entry.utxo.zoneProgramId] : [])),
+        ),
+      ];
   const rows = synced.wallet
     .privateTransactions()
     .filter((row) => row.kind === "publicWithdrawal" && row.direction === "outbound");
   const found = await Promise.all(
     rows.map(async (row) => {
       const to = await rpc
-        .getTransaction(row.id.signature as Signature, {
-          encoding: "jsonParsed",
-          maxSupportedTransactionVersion: 0,
-        })
+        .getTransaction(row.id.signature as Signature, ORIGIN_TRANSACTION_CONFIG)
         .send()
-        .then((tx) => confirmedWithdrawalRecipients(tx)[0])
+        .then((tx) => rings.flatMap((each) => confirmedRingWithdrawals(tx, each))[0]?.recipient)
         .catch(() => undefined);
       return [row.id.signature, to] as const;
     }),
@@ -161,7 +169,9 @@ export function participantViews(
         amount: row.amount,
       },
       { signers: [wallet], sender: wallet },
-      exit && recipient !== undefined ? [{ recipient, amount: row.amount }] : undefined,
+      exit && recipient !== undefined
+        ? [{ recipient, asset: row.asset, amount: row.amount }]
+        : undefined,
     );
   }
   return [

@@ -50,12 +50,34 @@ const FETCH = RING_READ_PAGE_LIMIT;
 const newestFirst = (items: readonly ShownTransaction[]): ShownTransaction[] =>
   [...items].sort((a, b) => Number(b.slot - a.slot));
 
+const oldest = (slots: readonly bigint[]): bigint =>
+  slots.reduce((low, slot) => (slot < low ? slot : low), slots[0] ?? 0n);
+
+const streamsOf = (
+  signer: RingReadSigner,
+  audit: Stream<Uint8Array> | undefined,
+  deposits: Stream<Uint8Array> | undefined,
+): Older | undefined => (audit || deposits ? { signer, audit, deposits } : undefined);
+
+/** One backward stream, absent once it reaches the end of the ring's history. */
+interface Stream<C> {
+  readonly cursor: C;
+  /** Oldest slot this stream has reached. */
+  readonly frontier: bigint;
+}
+
+interface Older {
+  readonly signer: RingReadSigner;
+  readonly audit: Stream<Uint8Array> | undefined;
+  readonly deposits: Stream<Uint8Array> | undefined;
+}
+
 interface View {
   readonly title: string;
   readonly items: readonly ShownTransaction[];
   readonly skipped: readonly SkippedRingTransaction[];
-  /** Present while the RPC holds older pages. */
-  readonly older: { readonly signer: RingReadSigner; readonly cursor: Uint8Array } | undefined;
+  /** Present while either stream holds older pages. */
+  readonly older: Older | undefined;
 }
 
 export function ReadPanel({
@@ -87,17 +109,50 @@ export function ReadPanel({
       ringRole({ rpc: accountReader(), ring, reader: parseReaderKey(readerKey) }),
   );
 
-  async function fetchPage(signer: RingReadSigner, cursor?: Uint8Array): Promise<Omit<View, "title">> {
+  /** The audited page of one stream, oldest slot reached alongside it. */
+  async function auditPage(signer: RingReadSigner, cursor?: Uint8Array) {
     if (!ring) throw new Error("add a ring first");
-    const client = ringRpc(rpcUrl);
-    const deposits = cursor === undefined ? await client.ringDeposits(ring).catch(() => []) : [];
-    const page = await client.getDecryptedTransactions({
+    const page = await ringRpc(rpcUrl).getDecryptedTransactions({
       ringProgramId: ring,
       signer,
       limit: FETCH,
       ...(cursor === undefined ? {} : { cursor }),
     });
-    const entering: ShownTransaction[] = deposits.map((deposit) => ({
+    const items = page.items.map((item) => {
+      const tags = item.outputs.map((output) => addressDecoder.decode(output.ownerTag));
+      const sender = senderOf(item.signers, tags);
+      return {
+        signature: item.signature,
+        slot: item.slot,
+        signers: item.signers,
+        ...(sender === undefined ? {} : { sender }),
+        undecryptableSlots: item.undecryptableSlots,
+        nullifiers: item.nullifiers,
+        ...(item.withdrawals.length === 0 ? {} : { withdrawals: item.withdrawals }),
+        outputs: item.outputs.map((output) => ({
+          slotIndex: output.slotIndex,
+          recipient: addressDecoder.decode(output.ownerTag),
+          asset: output.asset,
+          amount: output.amount,
+        })),
+      } satisfies ShownTransaction;
+    });
+    const slots = [...items, ...page.skipped].map((row) => row.slot);
+    return {
+      items,
+      skipped: page.skipped,
+      stream: page.cursor && { cursor: page.cursor, frontier: oldest(slots) },
+    };
+  }
+
+  async function depositPage(cursor?: Uint8Array) {
+    if (!ring) throw new Error("add a ring first");
+    const page = await ringRpc(rpcUrl).ringDeposits({
+      ringProgramId: ring,
+      limit: Number(FETCH),
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    const items = page.deposits.map((deposit) => ({
       signature: deposit.signature,
       slot: deposit.slot,
       deposit: true,
@@ -107,35 +162,19 @@ export function ReadPanel({
       outputs: [
         { slotIndex: 0, recipient: deposit.depositor, asset: deposit.asset, amount: deposit.amount },
       ],
-    }));
-    const audited = page.items.map((item) => {
-        const tags = item.outputs.map((output) =>
-          output.ownerTag === undefined ? undefined : addressDecoder.decode(output.ownerTag),
-        );
-        const signers = item.signers ?? [];
-        const sender = senderOf(signers, tags);
-      return {
-          signature: item.signature,
-          slot: item.slot,
-          signers,
-          ...(sender === undefined ? {} : { sender }),
-          undecryptableSlots: item.undecryptableSlots,
-          nullifiers: item.nullifiers,
-          ...(item.withdrawals === undefined || item.withdrawals.length === 0
-            ? {}
-            : { withdrawals: item.withdrawals }),
-          outputs: item.outputs.map((output, index) => ({
-            slotIndex: output.slotIndex,
-            ...(tags[index] === undefined ? {} : { recipient: tags[index] }),
-            asset: output.asset,
-            amount: output.amount,
-          })),
-        };
-    });
+    })) satisfies ShownTransaction[];
+    // A page can find no deposit and still hold history, so the service reports
+    // how far back it read.
+    const frontier = page.oldestSlot ?? oldest(items.map((item) => item.slot));
+    return { items, stream: page.cursor && { cursor: page.cursor, frontier } };
+  }
+
+  async function firstPage(signer: RingReadSigner): Promise<Omit<View, "title">> {
+    const [audit, deposits] = await Promise.all([auditPage(signer), depositPage()]);
     return {
-      items: newestFirst([...audited, ...entering]),
-      skipped: page.skipped,
-      older: page.cursor ? { signer, cursor: page.cursor } : undefined,
+      items: newestFirst([...audit.items, ...deposits.items]),
+      skipped: audit.skipped,
+      older: streamsOf(signer, audit.stream, deposits.stream),
     };
   }
 
@@ -153,7 +192,7 @@ export function ReadPanel({
         const synced = await shielded.sync();
         const [slots, withdrawnTo] = await Promise.all([
           transactionSlots(synced),
-          withdrawalRecipients(synced),
+          withdrawalRecipients(synced, ring),
         ]);
         setViews(
           participantViews(synced, ring, address, slots, withdrawnTo).map((v) => ({
@@ -167,18 +206,36 @@ export function ReadPanel({
       }
       const signer = passkey ? passkeySigner(passkey) : walletSigner(wallet);
       if (!signer) throw new Error("connect a wallet first");
-      setViews([{ title: "Ring", ...(await fetchPage(signer)) }]);
+      setViews([{ title: "Ring", ...(await firstPage(signer)) }]);
       setFetchedBy(
         `signed by ${passkey ? `passkey ${passkey.label} ${shortKey(passkey.publicKey, 6, 4)}` : `wallet ${shortKey(address ?? "")}`}`,
       );
     });
 
-  const older = (index: number, from: NonNullable<View["older"]>) =>
+  /**
+   * Advances whichever stream has read the least far back, so the two walk down
+   * together and the merged list stays complete behind their frontiers.
+   */
+  const older = (index: number, from: Older) =>
     run("older", async () => {
-      const next = await fetchPage(from.signer, from.cursor);
+      const behind =
+        from.audit && (!from.deposits || from.audit.frontier >= from.deposits.frontier);
+      const audit = behind ? await auditPage(from.signer, from.audit?.cursor) : undefined;
+      const deposits = behind ? undefined : await depositPage(from.deposits?.cursor);
       setViews((prev) =>
-        prev.map((v, i) =>
-          i === index ? { ...next, title: v.title, items: newestFirst([...v.items, ...next.items]) } : v,
+        prev.map((view, at) =>
+          at === index
+            ? {
+                ...view,
+                items: newestFirst([...view.items, ...(audit?.items ?? deposits?.items ?? [])]),
+                skipped: [...view.skipped, ...(audit?.skipped ?? [])],
+                older: streamsOf(
+                  from.signer,
+                  audit ? audit.stream : from.audit,
+                  deposits ? deposits.stream : from.deposits,
+                ),
+              }
+            : view,
         ),
       );
     });

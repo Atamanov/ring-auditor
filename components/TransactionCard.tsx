@@ -48,7 +48,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
           {(tx.withdrawals ?? []).map((w) => (
             <span key={`${w.recipient}:${String(w.amount)}`} className="flex items-center gap-2">
               <span className="rounded-full border border-accent/60 bg-accent-ground px-2 py-0.5 text-xs text-accent">
-                {formatAmount(w.amount)} in public
+                {formatAmount(w.amount, w.asset)} in public
               </span>
               <span className="text-muted">to</span>
               <Address value={w.recipient} />
