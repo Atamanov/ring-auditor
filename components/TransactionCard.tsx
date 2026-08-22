@@ -44,16 +44,20 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
             <tr key={output.slotIndex} className="border-t border-line">
               <td className="py-1 tabular-nums">{output.slotIndex}</td>
               <td className="py-1">
-                <span className="flex items-center gap-1.5">
-                  {output.recipientOwner ? (
+                {/* The viewing key names the recipient. A registered owner is
+                    the same recipient under a name the reader knows, so it
+                    takes the place of the key and the key moves under the
+                    icon. Registration is the recipient's, never the reader's. */}
+                {output.recipientOwner ? (
+                  <span className="flex items-center gap-1.5">
                     <Key value={output.recipientOwner} />
-                  ) : (
-                    <span className="text-muted">not registered</span>
-                  )}
-                  <ViewingKey value={toHex(output.recipientViewingPublicKey)}>
-                    <KeyIcon size={13} />
-                  </ViewingKey>
-                </span>
+                    <ViewingKey value={toHex(output.recipientViewingPublicKey)}>
+                      <KeyIcon size={13} />
+                    </ViewingKey>
+                  </span>
+                ) : (
+                  <Key value={toHex(output.recipientViewingPublicKey)} />
+                )}
               </td>
               <td className="py-1">{isSol(output.asset) ? "SOL" : <Key value={output.asset} />}</td>
               <td className="py-1 text-right tabular-nums">
