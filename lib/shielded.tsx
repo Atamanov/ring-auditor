@@ -10,6 +10,7 @@ import {
   createZolanaClient,
   syncWallet,
 } from "@heliuslabs/zolana";
+import { fetchUserRecord } from "@heliuslabs/zolana/wallet";
 import {
   ShieldedAddress,
   ShieldedKeypair,
@@ -162,6 +163,12 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     async (ring: Ring, lamports: bigint, recipient: Recipient) => {
       const { authority, shielded, owner } = await shieldedWallet();
       const c = await client();
+      // A Solana recipient is payable only through its registry record.
+      if (typeof recipient === "string" && !(await fetchUserRecord({ rpc: c, owner: recipient }))) {
+        throw new Error(
+          `${recipient} has no registry record, so paste the recipient's shielded address`,
+        );
+      }
       await refresh(ring.id);
       const signature = await sendTransaction(
         wallet,

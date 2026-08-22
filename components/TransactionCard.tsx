@@ -39,7 +39,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
         <thead className="text-left text-muted">
           <tr>
             <th className="font-normal">output</th>
-            <th className="font-normal">recipient</th>
+            <th className="font-normal">owner</th>
             <th className="font-normal">asset</th>
             <th className="text-right font-normal">amount</th>
           </tr>
@@ -55,6 +55,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
                 {isSol(output.asset) ? "SOL" : <Address value={output.asset} token />}
               </td>
               <td className="py-1 text-right tabular-nums">
+                {output.recipient === tx.sender && tx.sender !== undefined ? "-" : ""}
                 {formatAmount(output.amount, output.asset)}
                 {output.spent && <span className="ml-1 text-muted">spent</span>}
               </td>

@@ -18,8 +18,10 @@ export function isUserRejection(e: unknown): boolean {
 
 export function errorMessage(e: unknown): string {
   if (e instanceof RingError) {
-    const detail = e.details?.message;
-    if (typeof detail === "string") return detail;
+    const detail = e.details?.message ?? e.details?.reason;
+    const cause = e.cause instanceof Error ? e.cause.message : undefined;
+    if (typeof detail === "string") return `${e.code}, ${detail}`;
+    if (cause) return `${e.code}, ${cause}`;
   }
   return e instanceof Error ? e.message : String(e);
 }
