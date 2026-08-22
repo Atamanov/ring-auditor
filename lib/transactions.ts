@@ -9,9 +9,16 @@ export interface ShownOutput {
   readonly spent?: boolean;
 }
 
+/** A public settlement leg, so value that left the ring in the clear. */
+export interface ShownWithdrawal {
+  readonly recipient: string;
+  readonly amount: bigint;
+}
+
 export interface ShownTransaction {
   readonly signature: string;
   readonly slot: bigint;
+  readonly withdrawals?: readonly ShownWithdrawal[];
   /** The signer that owns one of the outputs, so the one that spent. */
   readonly sender?: string;
   readonly signers: readonly string[];
@@ -25,6 +32,7 @@ export function searchText(tx: ShownTransaction): string {
     tx.signature,
     tx.slot.toString(),
     tx.sender ?? "",
+    ...(tx.withdrawals ?? []).map((w) => w.recipient),
     ...tx.signers,
     ...tx.outputs.flatMap((o) => [
       o.recipient ?? "",

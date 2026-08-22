@@ -1,5 +1,5 @@
 import type { Address, Signature } from "@solana/kit";
-import { fetchOwnerTags } from "@heliuslabs/zolana";
+import { fetchTransactionSlots, type TransactionSlots } from "@heliuslabs/zolana";
 import type { PrivateTransaction } from "@heliuslabs/zolana/transaction";
 import type { ShownOutput, ShownTransaction } from "./transactions";
 import type { Synced } from "./shielded";
@@ -9,38 +9,25 @@ export interface ParticipantView {
   items: ShownTransaction[];
 }
 
-/** Owner tags of a transaction, by slot index, keyed by signature. */
-export type TagsBySignature = ReadonlyMap<string, ReadonlyMap<number, string>>;
+/** The output slots of a transaction, keyed by signature. */
+export type SlotsBySignature = ReadonlyMap<string, TransactionSlots>;
 
 /** Owner tags sit in the clear in the slot headers, so this needs no key. */
-export async function ownerTagsBySignature(
-  synced: Synced,
-  ring: Address,
-): Promise<TagsBySignature> {
-  const leaves = new Map<string, bigint>();
-  const byLeaf = new Map<bigint, PrivateTransaction>(
-    synced.wallet
-      .privateTransactions()
-      .filter((row) => row.direction !== "outbound")
-      .map((row) => [row.id.index, row]),
-  );
-  for (const entry of synced.wallet.utxos()) {
-    if (entry.utxo.zoneProgramId !== ring) continue;
-    const row = byLeaf.get(entry.outputContext.leafIndex);
-    if (row) leaves.set(row.id.signature, entry.outputContext.leafIndex);
-  }
+export async function transactionSlots(synced: Synced): Promise<SlotsBySignature> {
+  const signatures = [
+    ...new Set(synced.wallet.privateTransactions().map((row) => row.id.signature)),
+  ];
   const found = await Promise.all(
-    [...leaves].map(async ([signature, leafIndex]) => {
-      const tags = await fetchOwnerTags({
+    signatures.map(async (signature) => {
+      const slots = await fetchTransactionSlots({
         rpc: synced.client,
         signature: signature as Signature,
-        leafIndex,
       }).catch(() => undefined);
-      return [signature, tags] as const;
+      return [signature, slots] as const;
     }),
   );
   return new Map(
-    found.flatMap(([signature, tags]) => (tags === undefined ? [] : [[signature, tags]])),
+    found.flatMap(([signature, slots]) => (slots === undefined ? [] : [[signature, slots]])),
   );
 }
 
@@ -52,7 +39,7 @@ export function participantViews(
   synced: Synced,
   ring: Address,
   wallet: Address,
-  tags: TagsBySignature,
+  slots: SlotsBySignature,
 ): ParticipantView[] {
   const rows = synced.wallet.privateTransactions();
   const byLeaf = new Map<bigint, PrivateTransaction>(
@@ -60,16 +47,24 @@ export function participantViews(
   );
   // The wallet's own tag is its Solana address.
   const other = (signature: string) =>
-    [...(tags.get(signature)?.values() ?? [])].find((tag) => tag !== wallet);
+    [...(slots.get(signature)?.ownerTags.values() ?? [])].find((tag) => tag !== wallet);
+  // A send leaves no history row for its change, so a row is tied to the ring
+  // by the leaves of its slots, one of which holds a note of this ring.
+  const ringLeaves = new Set(
+    synced.wallet
+      .utxos()
+      .filter((entry) => entry.utxo.zoneProgramId === ring)
+      .map((entry) => entry.outputContext.leafIndex),
+  );
+  const onRing = (signature: string) =>
+    [...(slots.get(signature)?.leaves.values() ?? [])].some((leaf) => ringLeaves.has(leaf));
 
-  const onRing = new Set<string>();
   const received = new Map<string, ShownTransaction>();
   for (const entry of synced.wallet.utxos()) {
     if (entry.utxo.zoneProgramId !== ring) continue;
     const leaf = entry.outputContext.leafIndex;
     const row = byLeaf.get(leaf);
     if (!row) continue;
-    onRing.add(row.id.signature);
     const sender = other(row.id.signature);
     append(
       received,
@@ -87,13 +82,9 @@ export function participantViews(
   }
 
   const sent = new Map<string, ShownTransaction>();
-  const unplaced: string[] = [];
   for (const row of rows) {
     if (row.direction !== "outbound") continue;
-    if (!onRing.has(row.id.signature)) {
-      unplaced.push(row.id.signature);
-      continue;
-    }
+    if (!onRing(row.id.signature)) continue;
     const recipient = other(row.id.signature);
     append(
       sent,
@@ -108,20 +99,10 @@ export function participantViews(
       wallet,
     );
   }
-  trace(ring, unplaced);
   return [
     { title: "Sent", items: newestFirst(sent) },
     { title: "Received", items: newestFirst(received) },
   ];
-}
-
-/** A send of this ring that is missing from the list appears here first. */
-function trace(ring: Address, unplaced: readonly string[]): void {
-  if (unplaced.length === 0) return;
-  console.warn(
-    `participant view: ${unplaced.length} sent transaction(s) left no note of ring ${ring} and are hidden`,
-    unplaced,
-  );
 }
 
 function append(
