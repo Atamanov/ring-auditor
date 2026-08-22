@@ -11,13 +11,14 @@ import {
 } from "@heliuslabs/zolana/ring";
 import { walletAddress } from "@/lib/chain";
 import { ringRpcErrorMessage } from "@/lib/errors";
-import { shortKey, toBase58 } from "@/lib/format";
+import { shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
 import { participantViews, transactionSlots, withdrawalRecipients } from "@/lib/participant";
 import { passkeySigner, type StoredPasskey } from "@/lib/passkeys";
-import { senderOf } from "@/lib/parties";
 import { ringRpc } from "@/lib/ring-rpc";
-import { ringRole } from "@/lib/role";
+import { ringRole, senderOf } from "@heliuslabs/zolana/ring";
+import { accountReader } from "@/lib/accounts";
+import { getAddressDecoder } from "@solana/kit";
 import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
 import type { ShownTransaction } from "@/lib/transactions";
@@ -42,6 +43,8 @@ const MODE_ORDER = ["auditor", "participant"] as const satisfies readonly Mode[]
 const WALLET = "wallet";
 
 /** Per signature, the RPC's page bound. */
+const addressDecoder = getAddressDecoder();
+
 const FETCH = RING_READ_PAGE_LIMIT;
 
 interface View {
@@ -77,7 +80,8 @@ export function ReadPanel({
   const readerKey = passkey?.publicKey ?? address;
   const role = useLoaded(
     ring && readerKey ? { ring, readerKey, reads } : undefined,
-    ({ ring, readerKey }) => ringRole(ring, parseReaderKey(readerKey)),
+    ({ ring, readerKey }) =>
+      ringRole({ rpc: accountReader(), ring, reader: parseReaderKey(readerKey) }),
   );
 
   async function fetchPage(signer: RingReadSigner, cursor?: Uint8Array): Promise<Omit<View, "title">> {
@@ -91,7 +95,7 @@ export function ReadPanel({
     return {
       items: page.items.map((item) => {
         const tags = item.outputs.map((output) =>
-          output.ownerTag === undefined ? undefined : toBase58(output.ownerTag),
+          output.ownerTag === undefined ? undefined : addressDecoder.decode(output.ownerTag),
         );
         const signers = item.signers ?? [];
         const sender = senderOf(signers, tags);

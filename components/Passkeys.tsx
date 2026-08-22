@@ -13,7 +13,8 @@ import {
 import { sendInstruction, walletAddress } from "@/lib/chain";
 import { useAction, useLoaded, useRefreshToken } from "@/lib/hooks";
 import { registerPasskey, type StoredPasskey } from "@/lib/passkeys";
-import { ringRole, type RingRole } from "@/lib/role";
+import { ringRole, type RingRole } from "@heliuslabs/zolana/ring";
+import { accountReader } from "@/lib/accounts";
 import { GrantRequest } from "./GrantRequest";
 import { Badge, Button, Card, Field, Hint, IconButton, Key } from "./ui";
 
@@ -37,11 +38,16 @@ export function Passkeys({
     ring && { ring, token, keys: passkeys.map((p) => p.publicKey) },
     async ({ ring, keys }) =>
       new Map(
-        await Promise.all(keys.map(async (key) => [key, await ringRole(ring, parseReaderKey(key))] as const)),
+        await Promise.all(
+          keys.map(
+            async (key) =>
+              [key, await ringRole({ rpc: accountReader(), ring, reader: parseReaderKey(key) })] as const,
+          ),
+        ),
       ),
   );
   const walletRole = useLoaded(ring && authority && { ring, token, authority }, ({ ring, authority }) =>
-    ringRole(ring, authority),
+    ringRole({ rpc: accountReader(), ring, reader: authority }),
   );
   const isAuthority = walletRole.status === "ready" && walletRole.value === "authority";
   const roleOf = (p: StoredPasskey): RingRole | undefined =>

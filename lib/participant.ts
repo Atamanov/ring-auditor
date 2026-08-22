@@ -1,5 +1,6 @@
 import { createSolanaRpc, type Address, type Signature } from "@solana/kit";
 import { fetchTransactionSlots, type TransactionSlots } from "@heliuslabs/zolana";
+import { confirmedWithdrawalRecipients } from "@heliuslabs/zolana/ring";
 import type { PrivateTransaction } from "@heliuslabs/zolana/transaction";
 import type { ShownOutput, ShownTransaction, ShownWithdrawal } from "./transactions";
 import { SOLANA_RPC_URL } from "./config";
@@ -13,13 +14,7 @@ export interface ParticipantView {
 /** The account a withdrawal credited, keyed by signature. */
 export type WithdrawnTo = ReadonlyMap<string, string>;
 
-/**
- * The account a public withdrawal credited.
- *
- * The pool's SOL interface is debited exactly the amount, and the settlement
- * accounts follow it in the instruction, so this holds when the recipient also
- * pays the fee.
- */
+/** The account a public withdrawal credited, per signature. */
 export async function withdrawalRecipients(synced: Synced): Promise<WithdrawnTo> {
   const rpc = createSolanaRpc(SOLANA_RPC_URL);
   const rows = synced.wallet
@@ -27,32 +22,15 @@ export async function withdrawalRecipients(synced: Synced): Promise<WithdrawnTo>
     .filter((row) => row.kind === "publicWithdrawal" && row.direction === "outbound");
   const found = await Promise.all(
     rows.map(async (row) => {
-      const credited = await rpc
+      const to = await rpc
         .getTransaction(row.id.signature as Signature, {
           encoding: "jsonParsed",
           maxSupportedTransactionVersion: 0,
         })
         .send()
-        .then((tx) => {
-          const keys = (tx?.transaction.message.accountKeys ?? []).map((key) =>
-            typeof key === "string" ? key : key.pubkey,
-          );
-          const pre = tx?.meta?.preBalances ?? [];
-          const post = tx?.meta?.postBalances ?? [];
-          const paidOut = post.findIndex(
-            (after, index) => (pre[index] ?? 0n) - after === row.amount,
-          );
-          const source = paidOut < 0 ? undefined : keys[paidOut];
-          if (source === undefined) return undefined;
-          for (const instruction of tx?.transaction.message.instructions ?? []) {
-            const accounts = (instruction as { accounts?: readonly string[] }).accounts ?? [];
-            const at = accounts.indexOf(source);
-            if (at >= 0) return accounts[at + 1];
-          }
-          return undefined;
-        })
+        .then((tx) => confirmedWithdrawalRecipients(tx)[0])
         .catch(() => undefined);
-      return [row.id.signature, credited] as const;
+      return [row.id.signature, to] as const;
     }),
   );
   return new Map(
