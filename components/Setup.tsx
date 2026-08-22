@@ -65,11 +65,14 @@ export function Setup({ onAdd, onClose }: { onAdd: (ring: Ring) => void; onClose
       </div>
       <div className="flex flex-col gap-3 border-t border-line pt-4">
         <h3 className="text-sm font-medium">No ring yet? Make one</h3>
-        <ol className="ml-5 flex list-decimal flex-col gap-3 marker:text-muted">
+        <ol className="ml-5 list-decimal space-y-3 text-sm marker:text-muted">
           {STEPS.map((step) => (
-            <li key={step.code} className="flex flex-col gap-1.5 text-sm">
-              {step.text && <span>{step.text}</span>}
-              <Code>{step.code}</Code>
+            <li key={step.code}>
+              {/* A flex `li` is no longer a list item and loses its marker. */}
+              <div className="flex flex-col gap-1.5">
+                {step.text && <span>{step.text}</span>}
+                <Code>{step.code}</Code>
+              </div>
             </li>
           ))}
         </ol>

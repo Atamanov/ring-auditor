@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowsClockwise, Trash } from "@phosphor-icons/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import type { Address } from "@solana/kit";
@@ -76,7 +77,7 @@ export function Passkeys({
         <span className="flex items-center gap-2">
           Passkeys
           <IconButton title="Reload grant status" onClick={reload}>
-            ↻
+            <ArrowsClockwise size={14} />
           </IconButton>
         </span>
       }
@@ -142,7 +143,7 @@ function PasskeyRow({
         {canGrant && <Button onClick={() => onGrant(granted)}>{granted ? "Revoke" : "Grant"}</Button>}
         {!granted && <GrantRequest label={passkey.label} readerKey={passkey.publicKey} />}
         <IconButton title="Forget this passkey" onClick={onForget}>
-          forget
+          <Trash size={14} />
         </IconButton>
       </div>
     </div>

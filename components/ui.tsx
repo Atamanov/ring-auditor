@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
+import { Check, Copy, X } from "@phosphor-icons/react";
 import { shortKey } from "@/lib/format";
 
 const CONTROL = "rounded border border-line bg-bg px-3 py-2 text-sm text-text outline-none focus:border-accent";
@@ -63,7 +64,7 @@ export function IconButton({
       title={title}
       aria-label={title}
       {...props}
-      className={`text-muted hover:text-text disabled:opacity-40 ${framed ? "rounded border border-line px-3 py-2 text-sm" : "text-xs"}`}
+      className={`inline-flex items-center justify-center text-muted hover:text-text disabled:opacity-40 ${framed ? "rounded border border-line px-3 py-2.5 text-sm" : "text-xs"}`}
     />
   );
 }
@@ -126,7 +127,7 @@ export function Modal({
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">{title}</h2>
           <IconButton title="close" onClick={onClose}>
-            close
+            <X size={16} />
           </IconButton>
         </div>
         {children}
@@ -153,15 +154,26 @@ function useCopied(): [boolean, (value: string) => void] {
 export function Key({ value, head = 6, tail = 6 }: { value: string; head?: number; tail?: number }) {
   const [copied, copy] = useCopied();
   const plain = head + tail === 0;
-  const short = plain ? "copy" : shortKey(value, head, tail);
   return (
     <button
       type="button"
       title={copied ? "copied" : `${value}\nclick to copy`}
+      aria-label={plain ? "copy" : undefined}
       onClick={() => copy(value)}
-      className={`font-mono text-xs ${copied ? "text-emerald-400" : plain ? "text-muted hover:text-text" : "hover:text-accent"}`}
+      className={`inline-flex items-center gap-1 font-mono text-xs ${copied ? "text-emerald-400" : plain ? "text-muted hover:text-text" : "hover:text-accent"}`}
     >
-      {copied ? "copied" : short}
+      {plain ? (
+        copied ? (
+          <Check size={14} weight="bold" />
+        ) : (
+          <Copy size={14} />
+        )
+      ) : (
+        <>
+          {shortKey(value, head, tail)}
+          {copied && <Check size={12} weight="bold" />}
+        </>
+      )}
     </button>
   );
 }
@@ -183,16 +195,17 @@ export function Code({ children }: { children: string }) {
   const [copied, copy] = useCopied();
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded border border-line bg-bg py-2 pl-3 pr-16 font-mono text-xs leading-5">
+      <pre className="overflow-x-auto rounded border border-line bg-bg py-2 pl-3 pr-10 font-mono text-xs leading-5">
         {children}
       </pre>
       <button
         type="button"
-        title="copy"
+        title={copied ? "copied" : "copy"}
+        aria-label="copy"
         onClick={() => copy(children)}
-        className={`absolute right-2 top-2 font-mono text-xs ${copied ? "text-emerald-400" : "text-muted hover:text-text"}`}
+        className={`absolute right-2 top-2 ${copied ? "text-emerald-400" : "text-muted hover:text-text"}`}
       >
-        {copied ? "copied" : "copy"}
+        {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
       </button>
     </div>
   );

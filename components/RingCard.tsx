@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus, X } from "@phosphor-icons/react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -67,11 +68,11 @@ export function RingCard({
           ))}
         </Select>
         <IconButton framed title="Add a ring" onClick={() => setAdding((v) => !v)}>
-          +
+          <Plus size={14} weight="bold" />
         </IconButton>
         {ring && (
           <IconButton framed title="Remove this ring from the list" onClick={() => remove(ring.id)}>
-            ×
+            <X size={14} weight="bold" />
           </IconButton>
         )}
       </div>
