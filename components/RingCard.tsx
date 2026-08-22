@@ -15,13 +15,27 @@ import {
   type RingSelection,
 } from "@/lib/config";
 import { encodeShieldedAddress, parseRecipient, type Recipient } from "@/lib/address";
-import { formatAmount, parseSol, shortKey } from "@/lib/format";
+import { formatAmount, parseSol, shortKey, toHex } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
+import type { RingStatus } from "@heliuslabs/zolana/ring";
 import { isTimeout, ringRpc, RING_RPC_TIMEOUT_MS } from "@/lib/ring-rpc";
-import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { Setup } from "./Setup";
-import { Badge, Button, Caption, Card, Field, Hint, IconButton, Key, Modal, Mono, Select } from "./ui";
+import {
+  Address as AddressLink,
+  Badge,
+  Button,
+  Caption,
+  Card,
+  Field,
+  Hint,
+  IconButton,
+  Key,
+  Modal,
+  Mono,
+  Select,
+  Success,
+} from "./ui";
 
 export function RingCard({
   selection,
@@ -131,30 +145,70 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
 }
 
 function RingHealth({ ring, rpcUrl }: { ring: Address; rpcUrl: string }) {
-  const health = useLoaded({ ring, rpcUrl }, async ({ ring, rpcUrl }) => {
-    const status = await ringRpc(rpcUrl)
-      .health()
+  const status = useLoaded({ ring, rpcUrl }, ({ ring, rpcUrl }) =>
+    ringRpc(rpcUrl)
+      .ringStatus(ring)
       .catch((e: unknown) => {
         if (isTimeout(e)) {
-          throw new Error(`the ring RPC at ${rpcUrl} did not answer in ${RING_RPC_TIMEOUT_MS / 1000}s`);
+          throw new Error(
+            `the ring RPC at ${rpcUrl} did not answer in ${RING_RPC_TIMEOUT_MS / 1000}s`,
+          );
         }
         throw new Error(`no ring RPC answering at ${rpcUrl}`);
-      });
-    const ok = await servesRing(ring, status).catch(() => true);
-    if (!ok) throw new Error(`the RPC at ${rpcUrl} serves another ring's auditor key`);
-    return status;
-  });
-  switch (health.status) {
+      }),
+  );
+  switch (status.status) {
     case "loading":
       return <Badge>probing</Badge>;
     case "failed":
-      return <Badge>{health.error}</Badge>;
+      return <Badge>{status.error}</Badge>;
     case "ready":
+      return <RingState status={status.value} />;
+  }
+}
+
+function RingState({ status }: { status: RingStatus }) {
+  const key = <Key value={toHex(status.auditorPublicKey.toBytes())} />;
+  switch (status.state) {
+    case "served":
       return (
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>{health.value.mode}</Badge>
-          <span className="text-xs text-muted">service key</span>
-          <Mono>{health.value.servicePublicKey}</Mono>
+          <Success>served</Success>
+          <span className="text-xs text-muted">auditor key</span>
+          {key}
+          <span className="text-xs text-muted">service</span>
+          <AddressLink value={status.servicePublicKey} />
+        </div>
+      );
+    case "uninitialized":
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>no config yet</Badge>
+            <span className="text-xs text-muted">would pin</span>
+            {key}
+          </div>
+          <Hint>The ring has no config on chain. `just init` pins this service&apos;s key.</Hint>
+        </div>
+      );
+    case "foreignAuditor":
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>another auditor</Badge>
+            <span className="text-xs text-muted">config names</span>
+            {status.configAuditorPublicKey ? (
+              <Key value={toHex(status.configAuditorPublicKey.toBytes())} />
+            ) : (
+              <span className="text-muted">unknown</span>
+            )}
+            <span className="text-xs text-muted">this service holds</span>
+            {key}
+          </div>
+          <Hint>
+            The config pins a key this service does not hold, and it cannot change, so no read of
+            this ring can succeed here.
+          </Hint>
         </div>
       );
   }
