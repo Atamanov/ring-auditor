@@ -12,8 +12,9 @@
 #
 # Needs aws (with write access), docker, jq, git.
 #
-# Environment, defaults from .env.deploy. `up` looks the ring RPC and prover up
-# in CloudFront (the zolana-rings-test stack) and rewrites those two lines.
+# Environment, defaults from .env.deploy. `up` looks the ring RPC, the prover
+# and the indexer up in CloudFront (the zolana-rings-test stack) and rewrites
+# those three lines.
 #   RING_RPC_URL, PROVER_URL, INDEXER_URL, SOLANA_RPC_URL, ZOLANA_TREE
 #   AWS_REGION          default eu-north-1
 #   DEPLOY_VPC          VPC id, default the account's default VPC
@@ -194,13 +195,19 @@ ensure_service() {
     fi
 }
 
-# The hosted ring RPC and prover are the zolana-rings-test distributions.
+# The ring RPC, the prover and the indexer are the zolana-rings-test
+# distributions. The page is served over HTTPS, so every one of them has to be,
+# or the browser blocks the read as mixed content.
 resolve_service_urls() {
     local name host var
-    for name in ring-rpc prover; do
+    for name in ring-rpc prover indexer; do
         host="$(aws_ cloudfront list-distributions --query "DistributionList.Items[?Comment=='zolana-rings-test-$name'].DomainName | [0]" --output text 2>/dev/null || true)"
         [[ "$host" != None && -n "$host" ]] || { log "no zolana-rings-test-$name distribution, deploy the zolana ring test stack first"; exit 1; }
-        var=RING_RPC_URL; [[ "$name" == ring-rpc ]] || var=PROVER_URL
+        case "$name" in
+            ring-rpc) var=RING_RPC_URL ;;
+            prover) var=PROVER_URL ;;
+            *) var=INDEXER_URL ;;
+        esac
         export "$var=https://$host"
         sed -i.bak "s#^$var=.*#$var=https://$host#" .env.deploy && rm -f .env.deploy.bak
     done
