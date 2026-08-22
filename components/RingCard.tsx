@@ -9,7 +9,6 @@ import { walletAddress } from "@/lib/chain";
 import {
   RING_RPC_URL,
   SOLANA_RPC_URL,
-  ringRpcUrl,
   withRing,
   withoutRing,
   type Ring,
@@ -32,7 +31,6 @@ export function RingCard({
   onChange: (selection: RingSelection) => void;
 }) {
   const [adding, setAdding] = useState(selection.rings.length === 0);
-  const rpcUrl = ringRpcUrl(ring);
 
   function add(added: Ring) {
     onChange(withRing(selection, added));
@@ -80,14 +78,14 @@ export function RingCard({
             <span>program</span>
             <Mono>{ring.id}</Mono>
           </div>
-          <RingHealth ring={ring.id} rpcUrl={rpcUrl} />
+          <RingHealth ring={ring.id} rpcUrl={RING_RPC_URL} />
           <ShieldedActions ring={ring} />
         </>
       ) : (
-        <Hint>Add a ring to start, a name, its program id and its RPC.</Hint>
+        <Hint>Add a ring to start, a name and its program id.</Hint>
       )}
       <Hint>
-        ring rpc {rpcUrl} · solana {SOLANA_RPC_URL}
+        ring rpc {RING_RPC_URL} · solana {SOLANA_RPC_URL}
       </Hint>
     </Card>
   );
@@ -96,10 +94,9 @@ export function RingCard({
 interface Draft {
   name: string;
   id: string;
-  rpc: string;
 }
 
-const EMPTY: Draft = { name: "", id: "", rpc: "" };
+const EMPTY: Draft = { name: "", id: "" };
 
 function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
   const [draft, setDraft] = useState(EMPTY);
@@ -109,14 +106,9 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
   function submit() {
     const name = draft.name.trim();
     const id = draft.id.trim();
-    const rpc = draft.rpc.trim();
     if (!name) return toast.error("a name is required");
     if (!isAddress(id)) return toast.error("the ring program id is not a Solana address");
-    onAdd({
-      name,
-      id,
-      ...(rpc ? { rpc } : {}),
-    });
+    onAdd({ name, id });
     setDraft(EMPTY);
   }
 
@@ -124,7 +116,6 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
     <div className="flex flex-wrap items-end gap-3">
       <Field label="Name" value={draft.name} onChange={set("name")} />
       <Field label="Ring program id" value={draft.id} onChange={set("id")} />
-      <Field label="Ring RPC URL" value={draft.rpc} placeholder={RING_RPC_URL} onChange={set("rpc")} />
       <Button onClick={submit}>Add</Button>
     </div>
   );

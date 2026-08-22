@@ -12,8 +12,6 @@ export const TREE = (process.env.NEXT_PUBLIC_ZOLANA_TREE ??
 export interface Ring {
   readonly name: string;
   readonly id: Address;
-  /** Overrides RING_RPC_URL. */
-  readonly rpc?: string;
   /** Operator table, else one is created on first transfer. */
   readonly lookupTable?: Address;
 }
@@ -24,10 +22,6 @@ export interface RingSelection {
 }
 
 export const NO_RINGS: RingSelection = { rings: [], selected: undefined };
-
-export function ringRpcUrl(ring: Ring | undefined): string {
-  return ring?.rpc ?? RING_RPC_URL;
-}
 
 export function selectedRing(selection: RingSelection): Ring | undefined {
   return selection.rings.find((r) => r.id === selection.selected);
@@ -52,7 +46,6 @@ export function parseRingSelection(stored: unknown): RingSelection {
     const ring: Ring = {
       name: r.name,
       id: r.id,
-      ...(typeof r.rpc === "string" && r.rpc ? { rpc: r.rpc } : {}),
       ...(typeof r.lookupTable === "string" && isAddress(r.lookupTable)
         ? { lookupTable: r.lookupTable }
         : {}),

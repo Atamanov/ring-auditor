@@ -20,7 +20,7 @@ SDK's `RingReadSigner`. `lib/shielded.tsx` derives the wallet's shielded keys
 with one `signMessage` over the bare derivation payload `TSPP/derive/v1`
 (browser wallets refuse the off-chain envelope). The keys live in page state only.
 
-The Ring card lists named rings, `+` adds one (name, program id, its RPC),
+The Ring card lists named rings, `+` adds one (name and program id),
 `×` removes the selected one, and shows the wallet's balance
 on the ring with **Deposit** (shield SOL from the wallet), **Transfer** (an
 audited transfer inside the ring, the recipient is asked in a modal, a shielded
@@ -30,7 +30,8 @@ signature. Failures show as toasts. The wallet's shielded keys are derived once 
 signature over `TSPP/derive/v1` and reused by every action and the Participant
 view. The ring's lookup table is created with the wallet on the first transfer
 or burn and remembered per ring.
-Service URLs are deployment settings in `.env.local` (see `.env.example`).
+Service URLs are deployment settings in `.env.local` (see `.env.example`), the
+same for every ring the page lists.
 
 ## Delegating reads
 
