@@ -34,6 +34,7 @@ export interface Synced {
   readonly wallet: Wallet;
   readonly slot: bigint;
   readonly viewingPublicKey: Uint8Array;
+  readonly client: ZolanaClient;
 }
 
 /** Derived once per wallet connection, the wallet signs one time. */
@@ -117,7 +118,12 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     const c = await client();
     const slot = BigInt(await c.solanaRpc.getSlot().send());
     await syncWallet({ client: c, wallet: shielded, authority, config: { requireSlot: slot } });
-    return { wallet: shielded, slot, viewingPublicKey: shielded.identity.viewingPublicKey.toBytes() };
+    return {
+      wallet: shielded,
+      slot,
+      viewingPublicKey: shielded.identity.viewingPublicKey.toBytes(),
+      client: c,
+    };
   }, [client, shieldedWallet]);
 
   const refresh = useCallback(

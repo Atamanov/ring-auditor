@@ -1,4 +1,5 @@
-import type { Address } from "@solana/kit";
+import type { Address, Signature } from "@solana/kit";
+import { fetchOwnerTags } from "@heliuslabs/zolana";
 import type { PrivateTransaction } from "@heliuslabs/zolana/transaction";
 import type { ShownOutput, ShownTransaction } from "./transactions";
 import type { Synced } from "./shielded";
@@ -8,22 +9,59 @@ export interface ParticipantView {
   items: ShownTransaction[];
 }
 
+/** Owner tags of a transaction, by slot index, keyed by signature. */
+export type TagsBySignature = ReadonlyMap<string, ReadonlyMap<number, string>>;
+
+/** Owner tags sit in the clear in the slot headers, so this needs no key. */
+export async function ownerTagsBySignature(
+  synced: Synced,
+  ring: Address,
+): Promise<TagsBySignature> {
+  const leaves = new Map<string, bigint>();
+  const byLeaf = new Map<bigint, PrivateTransaction>(
+    synced.wallet
+      .privateTransactions()
+      .filter((row) => row.direction !== "outbound")
+      .map((row) => [row.id.index, row]),
+  );
+  for (const entry of synced.wallet.utxos()) {
+    if (entry.utxo.zoneProgramId !== ring) continue;
+    const row = byLeaf.get(entry.outputContext.leafIndex);
+    if (row) leaves.set(row.id.signature, entry.outputContext.leafIndex);
+  }
+  const found = await Promise.all(
+    [...leaves].map(async ([signature, leafIndex]) => {
+      const tags = await fetchOwnerTags({
+        rpc: synced.client,
+        signature: signature as Signature,
+        leafIndex,
+      }).catch(() => undefined);
+      return [signature, tags] as const;
+    }),
+  );
+  return new Map(
+    found.flatMap(([signature, tags]) => (tags === undefined ? [] : [[signature, tags]])),
+  );
+}
+
 /**
- * Received rows join a note to its history row by leaf index, sent rows are the
- * outbound history.
- *
- * The sync is keyed by the wallet's view tag, not by a ring, so one wallet holds
- * the notes and the history of every ring it ever used. `zoneProgramId` on a
- * note names its ring. An outbound row carries no ring of its own, so it is
- * placed by the notes of the same transaction, the change a send leaves in the
- * ring it spent from. A send that leaves no such note cannot be placed and is
- * dropped, which `TRACE` reports.
+ * A wallet holds notes of every ring it used, because the sync follows its view
+ * tag. An outbound row is placed by the change note it left.
  */
-export function participantViews(synced: Synced, ring: Address, wallet: Address): ParticipantView[] {
+export function participantViews(
+  synced: Synced,
+  ring: Address,
+  wallet: Address,
+  tags: TagsBySignature,
+): ParticipantView[] {
   const rows = synced.wallet.privateTransactions();
   const byLeaf = new Map<bigint, PrivateTransaction>(
     rows.filter((row) => row.direction !== "outbound").map((row) => [row.id.index, row]),
   );
+  // The wallet's own tag is its Solana address.
+  const other = (signature: string) =>
+    [...(tags.get(signature)?.values() ?? [])].find((tag) => tag !== wallet);
+
   const onRing = new Set<string>();
   const received = new Map<string, ShownTransaction>();
   for (const entry of synced.wallet.utxos()) {
@@ -32,15 +70,22 @@ export function participantViews(synced: Synced, ring: Address, wallet: Address)
     const row = byLeaf.get(leaf);
     if (!row) continue;
     onRing.add(row.id.signature);
-    const output: ShownOutput = {
-      slotIndex: Number(leaf),
-      recipientViewingPublicKey: synced.viewingPublicKey,
-      asset: entry.utxo.asset,
-      amount: entry.utxo.amount,
-      spent: entry.spent,
-    };
-    append(received, row, output, []);
+    const sender = other(row.id.signature);
+    append(
+      received,
+      row,
+      {
+        slotIndex: Number(leaf),
+        recipient: wallet,
+        asset: entry.utxo.asset,
+        amount: entry.utxo.amount,
+        spent: entry.spent,
+      },
+      [],
+      sender,
+    );
   }
+
   const sent = new Map<string, ShownTransaction>();
   const unplaced: string[] = [];
   for (const row of rows) {
@@ -49,16 +94,18 @@ export function participantViews(synced: Synced, ring: Address, wallet: Address)
       unplaced.push(row.id.signature);
       continue;
     }
+    const recipient = other(row.id.signature);
     append(
       sent,
       row,
       {
         slotIndex: sent.get(row.id.signature)?.outputs.length ?? 0,
-        recipientViewingPublicKey: row.counterpartyViewingPublicKey?.toBytes() ?? new Uint8Array(),
+        ...(recipient === undefined ? {} : { recipient }),
         asset: row.asset,
         amount: row.amount,
       },
       [wallet],
+      wallet,
     );
   }
   trace(ring, unplaced);
@@ -68,15 +115,7 @@ export function participantViews(synced: Synced, ring: Address, wallet: Address)
   ];
 }
 
-/**
- * A send of this ring that is missing from the list appears here first.
- *
- * The change note is the only thing that ties an outbound row to a ring. A ring
- * whose transfer stops leaving the sender a note, or a wallet that stops
- * recording that note as its own row, makes every send of the ring unplaceable,
- * and the whole Sent list empties out with one line per transaction here. Give
- * the outbound row a ring of its own before that happens.
- */
+/** A send of this ring that is missing from the list appears here first. */
 function trace(ring: Address, unplaced: readonly string[]): void {
   if (unplaced.length === 0) return;
   console.warn(
@@ -90,11 +129,13 @@ function append(
   row: PrivateTransaction,
   output: ShownOutput,
   signers: readonly string[],
+  sender?: string,
 ): void {
   const tx = into.get(row.id.signature) ?? {
     signature: row.id.signature,
     slot: row.id.slot,
     signers,
+    ...(sender === undefined ? {} : { sender }),
     outputs: [],
     undecryptableSlots: [],
     nullifiers: [],

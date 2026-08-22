@@ -11,11 +11,11 @@ import {
 } from "@heliuslabs/zolana/ring";
 import { walletAddress } from "@/lib/chain";
 import { ringRpcErrorMessage } from "@/lib/errors";
-import { shortKey } from "@/lib/format";
+import { shortKey, toBase58 } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
-import { participantViews } from "@/lib/participant";
+import { ownerTagsBySignature, participantViews } from "@/lib/participant";
 import { passkeySigner, type StoredPasskey } from "@/lib/passkeys";
-import { NO_OWNERS, registeredOwners, viewingKeyIndex } from "@/lib/registry";
+import { senderOf } from "@/lib/parties";
 import { ringRpc } from "@/lib/ring-rpc";
 import { ringRole } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
@@ -88,24 +88,28 @@ export function ReadPanel({
       limit: FETCH,
       ...(cursor === undefined ? {} : { cursor }),
     });
-    // An output names its recipient by viewing key. The registry is the only
-    // thing that ties one to a Solana address, and it answers the whole page at
-    // once. A registry that cannot be read leaves every recipient as its key.
-    const owners = await registeredOwners().catch(() => NO_OWNERS);
     return {
-      items: page.items.map((item) => ({
-        ...item,
-        signers: [],
-        outputs: item.outputs.map((output) => {
-          const viewingKey = output.recipientViewingPublicKey.toBytes();
-          const owner = owners.get(viewingKeyIndex(viewingKey));
-          return {
-            ...output,
-            recipientViewingPublicKey: viewingKey,
-            ...(owner === undefined ? {} : { recipientOwner: owner }),
-          };
-        }),
-      })),
+      items: page.items.map((item) => {
+        const tags = item.outputs.map((output) =>
+          output.ownerTag === undefined ? undefined : toBase58(output.ownerTag),
+        );
+        const signers = item.signers ?? [];
+        const sender = senderOf(signers, tags);
+        return {
+          signature: item.signature,
+          slot: item.slot,
+          signers,
+          ...(sender === undefined ? {} : { sender }),
+          undecryptableSlots: item.undecryptableSlots,
+          nullifiers: item.nullifiers,
+          outputs: item.outputs.map((output, index) => ({
+            slotIndex: output.slotIndex,
+            ...(tags[index] === undefined ? {} : { recipient: tags[index] }),
+            asset: output.asset,
+            amount: output.amount,
+          })),
+        };
+      }),
       skipped: page.skipped,
       older: page.cursor ? { signer, cursor: page.cursor } : undefined,
     };
@@ -123,9 +127,14 @@ export function ReadPanel({
       if (mode === "participant") {
         if (!ring || !address) throw new Error("connect a wallet first");
         const synced = await shielded.sync();
+        const tags = await ownerTagsBySignature(synced, ring);
         setViews(
-        participantViews(synced, ring, address).map((v) => ({ ...v, skipped: [], older: undefined })),
-      );
+          participantViews(synced, ring, address, tags).map((v) => ({
+            ...v,
+            skipped: [],
+            older: undefined,
+          })),
+        );
         setFetchedBy(`from local wallet sync at block ${synced.slot}`);
         return;
       }

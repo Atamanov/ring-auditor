@@ -1,9 +1,8 @@
-import { Key as KeyIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { explorerTxUrl } from "@/lib/config";
-import { formatAmount, isSol, shortKey, toBase58, toHex } from "@/lib/format";
+import { formatAmount, isSol, shortKey, toBase58 } from "@/lib/format";
 import type { ShownTransaction } from "@/lib/transactions";
-import { Key, ViewingKey } from "./ui";
+import { Address, Key } from "./ui";
 
 export function TransactionCard({ tx }: { tx: ShownTransaction }) {
   return (
@@ -14,7 +13,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
             href={explorerTxUrl(tx.signature)}
             target="_blank"
             rel="noreferrer"
-            title={`${tx.signature}\nopen in Solana Explorer`}
+            title={`${tx.signature}\nopen in the explorer`}
             className="font-mono text-xs underline decoration-line underline-offset-2 hover:text-accent"
           >
             {shortKey(tx.signature, 8, 8)}
@@ -23,12 +22,18 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
         </span>
         <span className="text-xs text-muted tabular-nums">block {tx.slot.toString()}</span>
       </header>
-      {tx.signers.length > 0 && (
-        <Row label="signers">
-          {tx.signers.map((signer) => (
-            <Key key={signer} value={signer} />
-          ))}
+      {tx.sender ? (
+        <Row label="sender">
+          <Address value={tx.sender} />
         </Row>
+      ) : (
+        tx.signers.length > 0 && (
+          <Row label="signers">
+            {tx.signers.map((signer) => (
+              <Address key={signer} value={signer} />
+            ))}
+          </Row>
+        )
       )}
       <table className="w-full text-xs">
         <thead className="text-left text-muted">
@@ -44,22 +49,11 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
             <tr key={output.slotIndex} className="border-t border-line">
               <td className="py-1 tabular-nums">{output.slotIndex}</td>
               <td className="py-1">
-                {/* The viewing key names the recipient. A registered owner is
-                    the same recipient under a name the reader knows, so it
-                    takes the place of the key and the key moves under the
-                    icon. Registration is the recipient's, never the reader's. */}
-                {output.recipientOwner ? (
-                  <span className="flex items-center gap-1.5">
-                    <Key value={output.recipientOwner} />
-                    <ViewingKey value={toHex(output.recipientViewingPublicKey)}>
-                      <KeyIcon size={13} />
-                    </ViewingKey>
-                  </span>
-                ) : (
-                  <Key value={toHex(output.recipientViewingPublicKey)} />
-                )}
+                {output.recipient ? <Address value={output.recipient} /> : <span className="text-muted">—</span>}
               </td>
-              <td className="py-1">{isSol(output.asset) ? "SOL" : <Key value={output.asset} />}</td>
+              <td className="py-1">
+                {isSol(output.asset) ? "SOL" : <Address value={output.asset} token />}
+              </td>
               <td className="py-1 text-right tabular-nums">
                 {formatAmount(output.amount, output.asset)}
                 {output.spent && <span className="ml-1 text-muted">spent</span>}

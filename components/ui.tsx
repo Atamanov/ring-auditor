@@ -10,6 +10,7 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { Check, Copy, X } from "@phosphor-icons/react";
+import { explorerAddressUrl, explorerTokenUrl } from "@/lib/config";
 import { shortKey } from "@/lib/format";
 
 const CONTROL = "rounded border border-line bg-bg px-3 py-2 text-sm text-text outline-none focus:border-accent";
@@ -229,5 +230,23 @@ export function ViewingKey({ value, children }: { value: string; children: React
     >
       {copied ? <Check size={13} weight="bold" /> : children}
     </button>
+  );
+}
+
+/** An address, linked to the explorer, with a copy control beside it. */
+export function Address({ value, token = false }: { value: string; token?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <a
+        href={token ? explorerTokenUrl(value) : explorerAddressUrl(value)}
+        target="_blank"
+        rel="noreferrer"
+        title={value}
+        className="font-mono text-xs underline decoration-line underline-offset-2 hover:text-accent"
+      >
+        {shortKey(value, 6, 6)}
+      </a>
+      <Key value={value} head={0} tail={0} />
+    </span>
   );
 }
