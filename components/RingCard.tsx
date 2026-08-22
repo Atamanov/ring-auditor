@@ -4,7 +4,6 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { isAddress, type Address } from "@solana/kit";
-import { RingRpc } from "@heliuslabs/zolana/ring";
 import { walletAddress } from "@/lib/chain";
 import {
   RING_RPC_URL,
@@ -17,6 +16,7 @@ import {
 import { encodeShieldedAddress, parseRecipient, type Recipient } from "@/lib/address";
 import { formatAmount, parseSol, shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
+import { isTimeout, ringRpc, RING_RPC_TIMEOUT_MS } from "@/lib/ring-rpc";
 import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { Setup } from "./Setup";
@@ -131,9 +131,14 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
 
 function RingHealth({ ring, rpcUrl }: { ring: Address; rpcUrl: string }) {
   const health = useLoaded({ ring, rpcUrl }, async ({ ring, rpcUrl }) => {
-    const status = await new RingRpc(rpcUrl).health().catch(() => {
-      throw new Error(`no ring RPC answering at ${rpcUrl}`);
-    });
+    const status = await ringRpc(rpcUrl)
+      .health()
+      .catch((e: unknown) => {
+        if (isTimeout(e)) {
+          throw new Error(`the ring RPC at ${rpcUrl} did not answer in ${RING_RPC_TIMEOUT_MS / 1000}s`);
+        }
+        throw new Error(`no ring RPC answering at ${rpcUrl}`);
+      });
     const ok = await servesRing(ring, status).catch(() => true);
     if (!ok) throw new Error(`the RPC at ${rpcUrl} serves another ring's auditor key`);
     return status;

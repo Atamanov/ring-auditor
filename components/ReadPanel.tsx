@@ -5,7 +5,6 @@ import { useCallback, useState } from "react";
 import type { Address } from "@solana/kit";
 import {
   RING_READ_PAGE_LIMIT,
-  RingRpc,
   parseReaderKey,
   type RingReadSigner,
   type SkippedRingTransaction,
@@ -16,6 +15,7 @@ import { shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
 import { participantViews } from "@/lib/participant";
 import { passkeySigner, type StoredPasskey } from "@/lib/passkeys";
+import { ringRpc } from "@/lib/ring-rpc";
 import { ringRole } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { walletSigner } from "@/lib/signers";
@@ -81,7 +81,7 @@ export function ReadPanel({
 
   async function fetchPage(signer: RingReadSigner, cursor?: Uint8Array): Promise<Omit<View, "title">> {
     if (!ring) throw new Error("add a ring first");
-    const page = await new RingRpc(rpcUrl).getDecryptedTransactions({
+    const page = await ringRpc(rpcUrl).getDecryptedTransactions({
       ringProgramId: ring,
       signer,
       limit: FETCH,

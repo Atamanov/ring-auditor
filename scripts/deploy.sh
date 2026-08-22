@@ -98,6 +98,11 @@ ensure_load_balancer() {
         arn="$(aws_ elbv2 create-load-balancer --name "$load_balancer" --type network --scheme internet-facing \
             --subnets "${subnet_list[@]}" --tags "$tag_spec" --query 'LoadBalancers[0].LoadBalancerArn' --output text)"
     fi
+    # One task runs in one zone, so the nodes of the other zones have no target.
+    # Without cross-zone they accept the connection and never answer, and two of
+    # the three balancer addresses time out.
+    aws_ elbv2 modify-load-balancer-attributes --load-balancer-arn "$arn" \
+        --attributes Key=load_balancing.cross_zone.enabled,Value=true >/dev/null
     group="$(aws_ elbv2 describe-target-groups --names "$prefix" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)"
     if [[ "$group" == None || -z "$group" ]]; then
         group="$(aws_ elbv2 create-target-group --name "$prefix" --protocol TCP --port "$container_port" --vpc-id "$vpc" \
