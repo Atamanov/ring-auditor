@@ -1,12 +1,52 @@
-import type { Address, Signature } from "@solana/kit";
+import { createSolanaRpc, type Address, type Signature } from "@solana/kit";
 import { fetchTransactionSlots, type TransactionSlots } from "@heliuslabs/zolana";
 import type { PrivateTransaction } from "@heliuslabs/zolana/transaction";
-import type { ShownOutput, ShownTransaction } from "./transactions";
+import type { ShownOutput, ShownTransaction, ShownWithdrawal } from "./transactions";
+import { SOLANA_RPC_URL } from "./config";
 import type { Synced } from "./shielded";
 
 export interface ParticipantView {
   title: string;
   items: ShownTransaction[];
+}
+
+/** The account a withdrawal credited, keyed by signature. */
+export type WithdrawnTo = ReadonlyMap<string, string>;
+
+/**
+ * The account a public withdrawal credited, found by the lamports it gained.
+ * The amount is exact, so no instruction layout is assumed.
+ */
+export async function withdrawalRecipients(synced: Synced): Promise<WithdrawnTo> {
+  const rpc = createSolanaRpc(SOLANA_RPC_URL);
+  const rows = synced.wallet
+    .privateTransactions()
+    .filter((row) => row.kind === "publicWithdrawal" && row.direction === "outbound");
+  const found = await Promise.all(
+    rows.map(async (row) => {
+      const credited = await rpc
+        .getTransaction(row.id.signature as Signature, {
+          encoding: "jsonParsed",
+          maxSupportedTransactionVersion: 0,
+        })
+        .send()
+        .then((tx) => {
+          const keys = tx?.transaction.message.accountKeys ?? [];
+          const pre = tx?.meta?.preBalances ?? [];
+          const post = tx?.meta?.postBalances ?? [];
+          const at = post.findIndex(
+            (after, index) => after - (pre[index] ?? 0n) === row.amount,
+          );
+          const key = at < 0 ? undefined : keys[at];
+          return typeof key === "string" ? key : key?.pubkey;
+        })
+        .catch(() => undefined);
+      return [row.id.signature, credited] as const;
+    }),
+  );
+  return new Map(
+    found.flatMap(([signature, to]) => (to === undefined ? [] : [[signature, to]])),
+  );
 }
 
 /** The output slots of a transaction, keyed by signature. */
@@ -40,6 +80,7 @@ export function participantViews(
   ring: Address,
   wallet: Address,
   slots: SlotsBySignature,
+  withdrawnTo: WithdrawnTo,
 ): ParticipantView[] {
   const rows = synced.wallet.privateTransactions();
   const byLeaf = new Map<bigint, PrivateTransaction>(
@@ -85,7 +126,8 @@ export function participantViews(
   for (const row of rows) {
     if (row.direction !== "outbound") continue;
     if (!onRing(row.id.signature)) continue;
-    const recipient = other(row.id.signature);
+    const exit = row.kind === "publicWithdrawal";
+    const recipient = exit ? withdrawnTo.get(row.id.signature) : other(row.id.signature);
     append(
       sent,
       row,
@@ -97,6 +139,7 @@ export function participantViews(
       },
       [wallet],
       wallet,
+      exit && recipient !== undefined ? [{ recipient, amount: row.amount }] : undefined,
     );
   }
   return [
@@ -111,12 +154,14 @@ function append(
   output: ShownOutput,
   signers: readonly string[],
   sender?: string,
+  withdrawals?: readonly ShownWithdrawal[],
 ): void {
   const tx = into.get(row.id.signature) ?? {
     signature: row.id.signature,
     slot: row.id.slot,
     signers,
     ...(sender === undefined ? {} : { sender }),
+    ...(withdrawals === undefined ? {} : { withdrawals }),
     outputs: [],
     undecryptableSlots: [],
     nullifiers: [],

@@ -13,7 +13,7 @@ import { walletAddress } from "@/lib/chain";
 import { ringRpcErrorMessage } from "@/lib/errors";
 import { shortKey, toBase58 } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
-import { participantViews, transactionSlots } from "@/lib/participant";
+import { participantViews, transactionSlots, withdrawalRecipients } from "@/lib/participant";
 import { passkeySigner, type StoredPasskey } from "@/lib/passkeys";
 import { senderOf } from "@/lib/parties";
 import { ringRpc } from "@/lib/ring-rpc";
@@ -130,9 +130,12 @@ export function ReadPanel({
       if (mode === "participant") {
         if (!ring || !address) throw new Error("connect a wallet first");
         const synced = await shielded.sync();
-        const slots = await transactionSlots(synced);
+        const [slots, withdrawnTo] = await Promise.all([
+          transactionSlots(synced),
+          withdrawalRecipients(synced),
+        ]);
         setViews(
-          participantViews(synced, ring, address, slots).map((v) => ({
+          participantViews(synced, ring, address, slots, withdrawnTo).map((v) => ({
             ...v,
             skipped: [],
             older: undefined,
