@@ -20,7 +20,12 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
           </a>
           <Key value={tx.signature} head={0} tail={0} />
         </span>
-        <span className="text-xs text-muted tabular-nums">block {tx.slot.toString()}</span>
+        <span className="flex items-center gap-2 text-xs text-muted tabular-nums">
+          {tx.deposit && (
+            <span className="rounded-full border border-line px-2 py-0.5 text-accent">deposit</span>
+          )}
+          block {tx.slot.toString()}
+        </span>
       </header>
       {tx.sender ? (
         <Row label="sender">

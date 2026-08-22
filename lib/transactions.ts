@@ -19,6 +19,8 @@ export interface ShownTransaction {
   readonly signature: string;
   readonly slot: bigint;
   readonly withdrawals?: readonly ShownWithdrawal[];
+  /** Value entering the ring, so no sender and nothing spent. */
+  readonly deposit?: boolean;
   /** The signer that owns one of the outputs, so the one that spent. */
   readonly sender?: string;
   readonly signers: readonly string[];

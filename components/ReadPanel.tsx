@@ -47,6 +47,9 @@ const addressDecoder = getAddressDecoder();
 
 const FETCH = RING_READ_PAGE_LIMIT;
 
+const newestFirst = (items: readonly ShownTransaction[]): ShownTransaction[] =>
+  [...items].sort((a, b) => Number(b.slot - a.slot));
+
 interface View {
   readonly title: string;
   readonly items: readonly ShownTransaction[];
@@ -86,20 +89,32 @@ export function ReadPanel({
 
   async function fetchPage(signer: RingReadSigner, cursor?: Uint8Array): Promise<Omit<View, "title">> {
     if (!ring) throw new Error("add a ring first");
-    const page = await ringRpc(rpcUrl).getDecryptedTransactions({
+    const client = ringRpc(rpcUrl);
+    const deposits = cursor === undefined ? await client.ringDeposits(ring).catch(() => []) : [];
+    const page = await client.getDecryptedTransactions({
       ringProgramId: ring,
       signer,
       limit: FETCH,
       ...(cursor === undefined ? {} : { cursor }),
     });
-    return {
-      items: page.items.map((item) => {
+    const entering: ShownTransaction[] = deposits.map((deposit) => ({
+      signature: deposit.signature,
+      slot: deposit.slot,
+      deposit: true,
+      signers: [],
+      undecryptableSlots: [],
+      nullifiers: [],
+      outputs: [
+        { slotIndex: 0, recipient: deposit.depositor, asset: deposit.asset, amount: deposit.amount },
+      ],
+    }));
+    const audited = page.items.map((item) => {
         const tags = item.outputs.map((output) =>
           output.ownerTag === undefined ? undefined : addressDecoder.decode(output.ownerTag),
         );
         const signers = item.signers ?? [];
         const sender = senderOf(signers, tags);
-        return {
+      return {
           signature: item.signature,
           slot: item.slot,
           signers,
@@ -116,7 +131,9 @@ export function ReadPanel({
             amount: output.amount,
           })),
         };
-      }),
+    });
+    return {
+      items: newestFirst([...audited, ...entering]),
       skipped: page.skipped,
       older: page.cursor ? { signer, cursor: page.cursor } : undefined,
     };
@@ -160,7 +177,9 @@ export function ReadPanel({
     run("older", async () => {
       const next = await fetchPage(from.signer, from.cursor);
       setViews((prev) =>
-        prev.map((v, i) => (i === index ? { ...next, title: v.title, items: [...v.items, ...next.items] } : v)),
+        prev.map((v, i) =>
+          i === index ? { ...next, title: v.title, items: newestFirst([...v.items, ...next.items]) } : v,
+        ),
       );
     });
 
