@@ -15,6 +15,7 @@ import { shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
 import { participantViews } from "@/lib/participant";
 import { passkeySigner, type StoredPasskey } from "@/lib/passkeys";
+import { NO_OWNERS, registeredOwners, viewingKeyIndex } from "@/lib/registry";
 import { ringRpc } from "@/lib/ring-rpc";
 import { ringRole } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
@@ -87,14 +88,23 @@ export function ReadPanel({
       limit: FETCH,
       ...(cursor === undefined ? {} : { cursor }),
     });
+    // An output names its recipient by viewing key. The registry is the only
+    // thing that ties one to a Solana address, and it answers the whole page at
+    // once. A registry that cannot be read leaves every recipient as its key.
+    const owners = await registeredOwners().catch(() => NO_OWNERS);
     return {
       items: page.items.map((item) => ({
         ...item,
         signers: [],
-        outputs: item.outputs.map((output) => ({
-          ...output,
-          recipientViewingPublicKey: output.recipientViewingPublicKey.toBytes(),
-        })),
+        outputs: item.outputs.map((output) => {
+          const viewingKey = output.recipientViewingPublicKey.toBytes();
+          const owner = owners.get(viewingKeyIndex(viewingKey));
+          return {
+            ...output,
+            recipientViewingPublicKey: viewingKey,
+            ...(owner === undefined ? {} : { recipientOwner: owner }),
+          };
+        }),
       })),
       skipped: page.skipped,
       older: page.cursor ? { signer, cursor: page.cursor } : undefined,

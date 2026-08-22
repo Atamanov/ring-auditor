@@ -1,8 +1,9 @@
+import { Key as KeyIcon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { explorerTxUrl } from "@/lib/config";
 import { formatAmount, isSol, shortKey, toBase58, toHex } from "@/lib/format";
 import type { ShownTransaction } from "@/lib/transactions";
-import { Key } from "./ui";
+import { Key, ViewingKey } from "./ui";
 
 export function TransactionCard({ tx }: { tx: ShownTransaction }) {
   return (
@@ -43,7 +44,16 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
             <tr key={output.slotIndex} className="border-t border-line">
               <td className="py-1 tabular-nums">{output.slotIndex}</td>
               <td className="py-1">
-                <Key value={toHex(output.recipientViewingPublicKey)} />
+                <span className="flex items-center gap-1.5">
+                  {output.recipientOwner ? (
+                    <Key value={output.recipientOwner} />
+                  ) : (
+                    <span className="text-muted">not registered</span>
+                  )}
+                  <ViewingKey value={toHex(output.recipientViewingPublicKey)}>
+                    <KeyIcon size={13} />
+                  </ViewingKey>
+                </span>
               </td>
               <td className="py-1">{isSol(output.asset) ? "SOL" : <Key value={output.asset} />}</td>
               <td className="py-1 text-right tabular-nums">

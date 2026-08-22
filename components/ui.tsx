@@ -210,3 +210,24 @@ export function Code({ children }: { children: string }) {
     </div>
   );
 }
+
+/**
+ * A value kept behind an icon, a click copies it.
+ *
+ * The audit table names a recipient by its registered address, and the viewing
+ * key behind it is the raw identity, too long to read and still worth copying.
+ */
+export function ViewingKey({ value, children }: { value: string; children: ReactNode }) {
+  const [copied, copy] = useCopied();
+  return (
+    <button
+      type="button"
+      title={copied ? "copied" : `${value}\nviewing key, click to copy`}
+      aria-label="copy the viewing key"
+      onClick={() => copy(value)}
+      className={`inline-flex items-center ${copied ? "text-emerald-400" : "text-muted hover:text-text"}`}
+    >
+      {copied ? <Check size={13} weight="bold" /> : children}
+    </button>
+  );
+}

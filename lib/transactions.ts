@@ -3,6 +3,8 @@ import { formatAmount, toBase58, toHex } from "./format";
 export interface ShownOutput {
   readonly slotIndex: number;
   readonly recipientViewingPublicKey: Uint8Array;
+  /** The Solana address that published this viewing key, when it is registered. */
+  readonly recipientOwner?: string;
   readonly asset: string;
   readonly amount: bigint;
   readonly spent?: boolean;
@@ -24,6 +26,7 @@ export function searchText(tx: ShownTransaction): string {
     ...tx.signers,
     ...tx.outputs.flatMap((o) => [
       toHex(o.recipientViewingPublicKey),
+      o.recipientOwner ?? "",
       o.asset,
       o.amount.toString(),
       formatAmount(o.amount, o.asset),
