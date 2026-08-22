@@ -12,9 +12,9 @@ export function GrantRequest({ label, readerKey }: { label: string; readerKey: s
         type="button"
         onClick={() => setOpen(true)}
         title="Request a grant from the ring operator"
-        className="glow-accent inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent-ground px-3 py-1.5 text-sm font-medium text-accent transition-colors hover:bg-accent hover:text-white"
+        className="glow-accent inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-ground px-2.5 py-1 text-xs text-accent transition-colors hover:border-accent hover:bg-accent hover:text-white"
       >
-        <PaperPlaneTilt size={16} weight="fill" />
+        <PaperPlaneTilt size={13} />
         Request grant
       </button>
       {open && (

@@ -48,20 +48,20 @@ body {
 @keyframes accent-glow {
   0%,
   100% {
-    box-shadow: 0 0 10px -3px var(--accent);
+    box-shadow: 0 0 5px -3px var(--accent);
   }
   50% {
-    box-shadow: 0 0 20px 0 var(--accent);
+    box-shadow: 0 0 11px -3px var(--accent);
   }
 }
 
 .glow-accent {
-  animation: accent-glow 2.6s ease-in-out infinite;
+  animation: accent-glow 3.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .glow-accent {
     animation: none;
-    box-shadow: 0 0 12px -2px var(--accent);
+    box-shadow: 0 0 7px -3px var(--accent);
   }
 }
