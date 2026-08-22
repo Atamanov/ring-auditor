@@ -14,8 +14,11 @@ export interface ParticipantView {
 export type WithdrawnTo = ReadonlyMap<string, string>;
 
 /**
- * The account a public withdrawal credited, found by the lamports it gained.
- * The amount is exact, so no instruction layout is assumed.
+ * The account a public withdrawal credited.
+ *
+ * The pool's SOL interface is debited exactly the amount, and the settlement
+ * accounts follow it in the instruction, so this holds when the recipient also
+ * pays the fee.
  */
 export async function withdrawalRecipients(synced: Synced): Promise<WithdrawnTo> {
   const rpc = createSolanaRpc(SOLANA_RPC_URL);
@@ -31,14 +34,22 @@ export async function withdrawalRecipients(synced: Synced): Promise<WithdrawnTo>
         })
         .send()
         .then((tx) => {
-          const keys = tx?.transaction.message.accountKeys ?? [];
+          const keys = (tx?.transaction.message.accountKeys ?? []).map((key) =>
+            typeof key === "string" ? key : key.pubkey,
+          );
           const pre = tx?.meta?.preBalances ?? [];
           const post = tx?.meta?.postBalances ?? [];
-          const at = post.findIndex(
-            (after, index) => after - (pre[index] ?? 0n) === row.amount,
+          const paidOut = post.findIndex(
+            (after, index) => (pre[index] ?? 0n) - after === row.amount,
           );
-          const key = at < 0 ? undefined : keys[at];
-          return typeof key === "string" ? key : key?.pubkey;
+          const source = paidOut < 0 ? undefined : keys[paidOut];
+          if (source === undefined) return undefined;
+          for (const instruction of tx?.transaction.message.instructions ?? []) {
+            const accounts = (instruction as { accounts?: readonly string[] }).accounts ?? [];
+            const at = accounts.indexOf(source);
+            if (at >= 0) return accounts[at + 1];
+          }
+          return undefined;
         })
         .catch(() => undefined);
       return [row.id.signature, credited] as const;
@@ -54,14 +65,22 @@ export type SlotsBySignature = ReadonlyMap<string, TransactionSlots>;
 
 /** Owner tags sit in the clear in the slot headers, so this needs no key. */
 export async function transactionSlots(synced: Synced): Promise<SlotsBySignature> {
+  // One signature can carry several events, and an inbound row's index is the
+  // note's leaf, which picks the event the wallet took part in.
+  const leaves = new Map<string, bigint>();
+  for (const row of synced.wallet.privateTransactions()) {
+    if (row.direction !== "outbound") leaves.set(row.id.signature, row.id.index);
+  }
   const signatures = [
     ...new Set(synced.wallet.privateTransactions().map((row) => row.id.signature)),
   ];
   const found = await Promise.all(
     signatures.map(async (signature) => {
+      const leafIndex = leaves.get(signature);
       const slots = await fetchTransactionSlots({
         rpc: synced.client,
         signature: signature as Signature,
+        ...(leafIndex === undefined ? {} : { leafIndex }),
       }).catch(() => undefined);
       return [signature, slots] as const;
     }),
@@ -106,7 +125,8 @@ export function participantViews(
     const leaf = entry.outputContext.leafIndex;
     const row = byLeaf.get(leaf);
     if (!row) continue;
-    const sender = other(row.id.signature);
+    // A deposit is the wallet paying itself in, so it has no counterparty.
+    const sender = row.kind === "deposit" ? undefined : other(row.id.signature);
     append(
       received,
       row,

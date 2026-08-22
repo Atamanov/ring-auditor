@@ -214,7 +214,7 @@ function RingState({ status }: { status: RingStatus }) {
   }
 }
 
-type Move = "refresh" | "deposit" | "transfer" | "burn";
+type Move = "refresh" | "deposit" | "transfer" | "burn" | "register";
 
 function ShieldedActions({ ring }: { ring: Ring }) {
   const wallet = useWallet();
@@ -276,6 +276,14 @@ function ShieldedActions({ ring }: { ring: Ring }) {
           {busy === "burn" ? "Proving…" : "Burn"}
         </Button>
       </div>
+      {shielded.unregistered && (
+        <RegisterPrompt
+          onRegister={() => run("register", async () => {
+            toast.success(`registered, ${shortKey(await shielded.register(), 8, 8)}`);
+          })}
+          busy={busy === "register"}
+        />
+      )}
       {transferring && lamports !== undefined && (
         <TransferModal
           ring={ring}
@@ -292,6 +300,33 @@ function ShieldedActions({ ring }: { ring: Ring }) {
         />
       )}
     </>
+  );
+}
+
+function RegisterPrompt({ onRegister, busy }: { onRegister: () => void; busy: boolean }) {
+  const [open, setOpen] = useState(true);
+  if (!open) return null;
+  return (
+    <Modal title="Register this wallet" onClose={() => setOpen(false)}>
+      <p className="text-sm">
+        Publishing this wallet&apos;s shielded keys lets anyone pay its Solana address without a
+        public withdrawal. It costs one signature and 0.00182352 SOL of rent.
+      </p>
+      <div className="flex justify-end gap-2">
+        <IconButton framed title="Not now" onClick={() => setOpen(false)}>
+          Not now
+        </IconButton>
+        <Button
+          onClick={() => {
+            setOpen(false);
+            onRegister();
+          }}
+          disabled={busy}
+        >
+          {busy ? "Registering…" : "Register"}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -313,6 +348,8 @@ function TransferModal({
   const record = useLoaded(typeof to === "string" ? { to } : undefined, ({ to }) =>
     shielded.registered(to),
   );
+  // A shielded address needs no record, so it must not wait on the lookup.
+  const checking = typeof to === "string" && record.status === "loading";
   const exits = typeof to === "string" && record.status === "ready" && !record.value;
   return (
     <Modal title={`Transfer ${formatAmount(lamports)} inside ${ring.name}`} onClose={onClose}>
@@ -327,7 +364,7 @@ function TransferModal({
         onChange={(e) => setRecipient(e.target.value)}
         autoFocus
       />
-      {typeof to === "string" && record.status === "loading" && <Hint>checking the registry…</Hint>}
+      {checking && <Hint>checking the registry…</Hint>}
       {exits && (
         <div className="rounded border border-accent/60 bg-accent-ground p-3 text-sm">
           <p className="font-medium text-accent">This leaves the ring in public.</p>
@@ -346,7 +383,7 @@ function TransferModal({
               ? onConfirm(to, exits)
               : toast.error("the recipient is not a shielded or Solana address")
           }
-          disabled={!recipient.trim() || record.status === "loading"}
+          disabled={!to || checking}
         >
           {exits ? "Withdraw publicly" : "Sign and transfer"}
         </Button>
