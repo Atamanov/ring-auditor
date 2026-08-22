@@ -47,7 +47,9 @@ export async function transactionSlots(synced: Synced): Promise<SlotsBySignature
   // note's leaf, which picks the event the wallet took part in.
   const leaves = new Map<string, bigint>();
   for (const row of synced.wallet.privateTransactions()) {
-    if (row.direction !== "outbound") leaves.set(row.id.signature, row.id.index);
+    if (row.direction === "inbound" || row.kind === "merge") {
+      leaves.set(row.id.signature, row.id.index);
+    }
   }
   const signatures = [
     ...new Set(synced.wallet.privateTransactions().map((row) => row.id.signature)),
@@ -81,7 +83,9 @@ export function participantViews(
 ): ParticipantView[] {
   const rows = synced.wallet.privateTransactions();
   const byLeaf = new Map<bigint, PrivateTransaction>(
-    rows.filter((row) => row.direction !== "outbound").map((row) => [row.id.index, row]),
+    rows
+      .filter((row) => row.direction === "inbound" || row.kind === "merge")
+      .map((row) => [row.id.index, row]),
   );
   // The wallet's own tag is its Solana address.
   const other = (signature: string) =>
@@ -133,14 +137,14 @@ export function participantViews(
         amount: entry.utxo.amount,
         spent: entry.spent,
       },
-      [],
-      sender,
+      { signers: [], ...(sender === undefined ? {} : { sender }), deposit: row.kind === "deposit" },
     );
   }
 
   const sent = new Map<string, ShownTransaction>();
   for (const row of rows) {
-    if (row.direction !== "outbound") continue;
+    // A payment to yourself is recorded as a split, so it belongs here too.
+    if (row.direction === "inbound" || row.kind === "merge") continue;
     if (!onRing(row.id.signature)) continue;
     const exit = row.kind === "publicWithdrawal";
     // Every tag of a self-payment is the wallet's own, so no counterparty shows.
@@ -156,8 +160,7 @@ export function participantViews(
         asset: row.asset,
         amount: row.amount,
       },
-      [wallet],
-      wallet,
+      { signers: [wallet], sender: wallet },
       exit && recipient !== undefined ? [{ recipient, amount: row.amount }] : undefined,
     );
   }
@@ -171,15 +174,15 @@ function append(
   into: Map<string, ShownTransaction>,
   row: PrivateTransaction,
   output: ShownOutput,
-  signers: readonly string[],
-  sender?: string,
+  head: Readonly<{ signers: readonly string[]; sender?: string; deposit?: boolean }>,
   withdrawals?: readonly ShownWithdrawal[],
 ): void {
   const tx = into.get(row.id.signature) ?? {
     signature: row.id.signature,
     slot: row.id.slot,
-    signers,
-    ...(sender === undefined ? {} : { sender }),
+    signers: head.signers,
+    ...(head.sender === undefined ? {} : { sender: head.sender }),
+    ...(head.deposit ? { deposit: true } : {}),
     ...(withdrawals === undefined ? {} : { withdrawals }),
     outputs: [],
     undecryptableSlots: [],

@@ -233,25 +233,29 @@ export function ViewingKey({ value, children }: { value: string; children: React
   );
 }
 
-/** An address, linked to the explorer. `shielded` marks one recovered from a shielded owner. */
+/** `shielded` marks an address recovered from a shielded owner, and names it on hover. */
 export function Address({
   value,
   token = false,
-  shielded = false,
+  shielded,
 }: {
   value: string;
   token?: boolean;
-  shielded?: boolean;
+  shielded?: string | boolean;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {shielded && (
-        <ShieldCheck
-          size={13}
-          weight="fill"
-          className="shrink-0 text-accent"
-          aria-label="shielded owner"
-    />
+        <span
+          className="inline-flex shrink-0 text-accent"
+          title={
+            typeof shielded === "string"
+              ? `${shielded}\nthe shielded address behind this owner`
+              : "shielded owner"
+          }
+        >
+          <ShieldCheck size={13} weight="fill" aria-label="shielded owner" />
+        </span>
       )}
       <a
         href={token ? explorerTokenUrl(value) : explorerAddressUrl(value)}

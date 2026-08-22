@@ -1,7 +1,10 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { explorerTxUrl } from "@/lib/config";
 import { formatAmount, isSol, shortKey, toBase58 } from "@/lib/format";
 import type { ShownTransaction } from "@/lib/transactions";
+import { useShieldedAddress } from "@/lib/owners";
 import { Address, Key } from "./ui";
 
 export function TransactionCard({ tx }: { tx: ShownTransaction }) {
@@ -68,7 +71,7 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
               <td className="py-1 tabular-nums">{output.slotIndex}</td>
               <td className="py-1">
                 {output.recipient ? (
-                  <Address value={output.recipient} shielded />
+                  <Owner value={output.recipient} />
                 ) : (
                   <span className="text-muted">—</span>
                 )}
@@ -99,6 +102,11 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
       )}
     </article>
   );
+}
+
+/** An output owner, named by its shielded address once the registry answers. */
+function Owner({ value }: { value: string }) {
+  return <Address value={value} shielded={useShieldedAddress(value) ?? true} />;
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
