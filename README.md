@@ -20,6 +20,11 @@ SDK's `RingReadSigner`. `lib/shielded.tsx` derives the wallet's shielded keys
 with one `signMessage` over the bare derivation payload `TSPP/derive/v1`
 (browser wallets refuse the off-chain envelope). The keys live in page state only.
 
+On the first visit, with no ring stored in the browser, a wizard asks for the
+first ring's name and program id and, below the form, shows how to generate a
+ring: clone the Zolana checkout, `just ring-new`, then `just devnet` and
+`just pipeline` in the generated ring, which prints the program id to paste.
+
 The Ring card lists named rings, `+` adds one (name and program id),
 `×` removes the selected one, and shows the wallet's balance
 on the ring with **Deposit** (shield SOL from the wallet), **Transfer** (an

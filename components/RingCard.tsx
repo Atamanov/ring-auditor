@@ -19,6 +19,7 @@ import { formatAmount, parseSol, shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
 import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
+import { Setup } from "./Setup";
 import { Badge, Button, Caption, Card, Field, Hint, IconButton, Key, Modal, Mono, Select } from "./ui";
 
 export function RingCard({
@@ -30,17 +31,20 @@ export function RingCard({
   ring: Ring | undefined;
   onChange: (selection: RingSelection) => void;
 }) {
-  const [adding, setAdding] = useState(selection.rings.length === 0);
+  const [adding, setAdding] = useState(false);
+  // No ring has ever been added in this browser, the wizard says where one comes from.
+  const [setup, setSetup] = useState(selection.rings.length === 0);
 
   function add(added: Ring) {
     onChange(withRing(selection, added));
     setAdding(false);
+    setSetup(false);
   }
 
   function remove(id: Address) {
     const next = withoutRing(selection, id);
     onChange(next);
-    if (next.rings.length === 0) setAdding(true);
+    if (next.rings.length === 0) setSetup(true);
   }
 
   return (
@@ -72,6 +76,7 @@ export function RingCard({
         )}
       </div>
       {adding && <AddRing onAdd={add} />}
+      {setup && <Setup onAdd={add} onClose={() => setSetup(false)} />}
       {ring ? (
         <>
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -82,7 +87,10 @@ export function RingCard({
           <ShieldedActions ring={ring} />
         </>
       ) : (
-        <Hint>Add a ring to start, a name and its program id.</Hint>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => setSetup(true)}>Add a ring</Button>
+          <Hint>A name and the ring program id, or how to generate a ring.</Hint>
+        </div>
       )}
       <Hint>
         ring rpc {RING_RPC_URL} · solana {SOLANA_RPC_URL}

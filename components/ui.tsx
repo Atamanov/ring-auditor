@@ -177,3 +177,23 @@ export function Copyable({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+/** A shell snippet, the button copies the whole thing. */
+export function Code({ children }: { children: string }) {
+  const [copied, copy] = useCopied();
+  return (
+    <div className="relative">
+      <pre className="overflow-x-auto rounded border border-line bg-bg py-2 pl-3 pr-16 font-mono text-xs leading-5">
+        {children}
+      </pre>
+      <button
+        type="button"
+        title="copy"
+        onClick={() => copy(children)}
+        className={`absolute right-2 top-2 font-mono text-xs ${copied ? "text-emerald-400" : "text-muted hover:text-text"}`}
+      >
+        {copied ? "copied" : "copy"}
+      </button>
+    </div>
+  );
+}
