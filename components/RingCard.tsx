@@ -22,7 +22,6 @@ import { isTimeout, ringRpc, RING_RPC_TIMEOUT_MS } from "@/lib/ring-rpc";
 import { useShielded } from "@/lib/shielded";
 import { Setup } from "./Setup";
 import {
-  Address as AddressLink,
   Badge,
   Button,
   Caption,
@@ -174,20 +173,14 @@ function RingState({ status }: { status: RingStatus }) {
       return (
         <div className="flex flex-wrap items-center gap-2">
           <Success>served</Success>
-          <span className="text-xs text-muted">auditor key</span>
-          {key}
           <span className="text-xs text-muted">service</span>
-          <AddressLink value={status.servicePublicKey} />
+          <Key value={status.servicePublicKey} />
         </div>
       );
     case "uninitialized":
       return (
         <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge>no config yet</Badge>
-            <span className="text-xs text-muted">would pin</span>
-            {key}
-          </div>
+          <Badge>no config yet</Badge>
           <Hint>The ring has no config on chain. `just init` pins this service&apos;s key.</Hint>
         </div>
       );
@@ -241,7 +234,7 @@ function ShieldedActions({ ring }: { ring: Ring }) {
             {shielded.balance === undefined ? "—" : formatAmount(shielded.balance)}
           </span>
         </div>
-        {shielded.address && (
+        {shielded.address && shielded.unregistered === false && (
           <div className="flex flex-col gap-1 text-sm">
             <Caption>Shielded address</Caption>
             <Key value={encodeShieldedAddress(shielded.address)} head={8} tail={8} />

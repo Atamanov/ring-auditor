@@ -52,8 +52,8 @@ export interface Shielded {
   withdraw(ring: Ring, lamports: bigint, recipient: Address): Promise<string>;
   /** Whether a Solana address can receive a shielded note. */
   registered(recipient: Address): Promise<boolean>;
-  /** Set while the wallet has no registry record, cleared once it publishes one. */
-  readonly unregistered: boolean;
+  /** True with no registry record, false with one, undefined before the first sync. */
+  readonly unregistered: boolean | undefined;
   /** Publishes this wallet's shielded keys so its Solana address is payable. */
   register(): Promise<string>;
   /** A transfer to a key nobody holds. */
@@ -86,7 +86,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet();
   const address = walletAddress(wallet);
   const [session, setSession] = useState<Session>();
-  const [unregistered, setUnregistered] = useState(false);
+  const [unregistered, setUnregistered] = useState<boolean>();
   const current = session?.wallet === address ? session : undefined;
   const clientRef = useRef<Promise<ZolanaClient>>(undefined);
   const derivedRef = useRef<Derived>(undefined);
