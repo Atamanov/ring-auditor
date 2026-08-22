@@ -227,9 +227,13 @@ function ShieldedActions({ ring }: { ring: Ring }) {
           ring={ring}
           lamports={lamports}
           onClose={() => setTransferring(false)}
-          onConfirm={(to) => {
+          onConfirm={(to, publicly) => {
             setTransferring(false);
-            void move("transfer", () => shielded.transfer(ring, lamports, to).then(sent("transferred")));
+            void move("transfer", () =>
+              publicly && typeof to === "string"
+                ? shielded.withdraw(ring, lamports, to).then(sent("withdrawn publicly"))
+                : shielded.transfer(ring, lamports, to).then(sent("transferred")),
+            );
           }}
         />
       )}
@@ -246,15 +250,21 @@ function TransferModal({
   ring: Ring;
   lamports: bigint;
   onClose: () => void;
-  onConfirm: (to: Recipient) => void;
+  onConfirm: (to: Recipient, publicly: boolean) => void;
 }) {
+  const shielded = useShielded();
   const [recipient, setRecipient] = useState("");
   const to = parseRecipient(recipient);
+  // Only a Solana address needs a record. A shielded address carries the keys.
+  const record = useLoaded(typeof to === "string" ? { to } : undefined, ({ to }) =>
+    shielded.registered(to),
+  );
+  const exits = typeof to === "string" && record.status === "ready" && !record.value;
   return (
     <Modal title={`Transfer ${formatAmount(lamports)} inside ${ring.name}`} onClose={onClose}>
       <p className="text-sm">
         A shielded address, as shown under the balance, needs no registration. A Solana address
-        works once its owner registered on chain. The note stays in the ring and the auditor can
+        needs a registry record to receive a note. The note stays in the ring and the auditor can
         read it.
       </p>
       <Field
@@ -263,14 +273,28 @@ function TransferModal({
         onChange={(e) => setRecipient(e.target.value)}
         autoFocus
       />
+      {typeof to === "string" && record.status === "loading" && <Hint>checking the registry…</Hint>}
+      {exits && (
+        <div className="rounded border border-accent/60 bg-accent-ground p-3 text-sm">
+          <p className="font-medium text-accent">This leaves the ring in public.</p>
+          <p className="mt-1 text-muted">
+            {shortKey(to, 8, 8)} has no registry record, so it cannot hold a shielded note. Sending
+            anyway withdraws {formatAmount(lamports)} to it as plain SOL, and the recipient, the
+            amount and the asset are visible on chain. Your remaining balance stays hidden and the
+            auditor still sees the exit.
+          </p>
+        </div>
+      )}
       <div className="flex justify-end">
         <Button
           onClick={() =>
-            to ? onConfirm(to) : toast.error("the recipient is not a shielded or Solana address")
+            to
+              ? onConfirm(to, exits)
+              : toast.error("the recipient is not a shielded or Solana address")
           }
-          disabled={!recipient.trim()}
+          disabled={!recipient.trim() || record.status === "loading"}
         >
-          Sign and transfer
+          {exits ? "Withdraw publicly" : "Sign and transfer"}
         </Button>
       </div>
     </Modal>

@@ -12,7 +12,7 @@
     "read": "node --experimental-strip-types --no-warnings scripts/read.ts"
   },
   "dependencies": {
-    "@heliuslabs/zolana": "github:alex-helius/zolana#f942d0e9&path:sdk-libs/ts",
+    "@heliuslabs/zolana": "github:alex-helius/zolana#6c82f701&path:sdk-libs/ts",
     "@noble/curves": "^2.3.0",
     "@phosphor-icons/react": "^2.1.10",
     "@scure/base": "^2.3.0",
