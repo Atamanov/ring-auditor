@@ -67,7 +67,11 @@ export function TransactionCard({ tx }: { tx: ShownTransaction }) {
             <tr key={output.slotIndex} className="border-t border-line">
               <td className="py-1 tabular-nums">{output.slotIndex}</td>
               <td className="py-1">
-                {output.recipient ? <Address value={output.recipient} /> : <span className="text-muted">—</span>}
+                {output.recipient ? (
+                  <Address value={output.recipient} shielded />
+                ) : (
+                  <span className="text-muted">—</span>
+                )}
               </td>
               <td className="py-1">
                 {isSol(output.asset) ? "SOL" : <Address value={output.asset} token />}

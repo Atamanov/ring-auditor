@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from "react";
-import { Check, Copy, X } from "@phosphor-icons/react";
+import { Check, Copy, ShieldCheck, X } from "@phosphor-icons/react";
 import { explorerAddressUrl, explorerTokenUrl } from "@/lib/config";
 import { shortKey } from "@/lib/format";
 
@@ -233,10 +233,26 @@ export function ViewingKey({ value, children }: { value: string; children: React
   );
 }
 
-/** An address, linked to the explorer, with a copy control beside it. */
-export function Address({ value, token = false }: { value: string; token?: boolean }) {
+/** An address, linked to the explorer. `shielded` marks one recovered from a shielded owner. */
+export function Address({
+  value,
+  token = false,
+  shielded = false,
+}: {
+  value: string;
+  token?: boolean;
+  shielded?: boolean;
+}) {
   return (
     <span className="inline-flex items-center gap-1.5">
+      {shielded && (
+        <ShieldCheck
+          size={13}
+          weight="fill"
+          className="shrink-0 text-accent"
+          aria-label="shielded owner"
+    />
+      )}
       <a
         href={token ? explorerTokenUrl(value) : explorerAddressUrl(value)}
         target="_blank"

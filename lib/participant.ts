@@ -96,15 +96,33 @@ export function participantViews(
   );
   const onRing = (signature: string) =>
     [...(slots.get(signature)?.leaves.values() ?? [])].some((leaf) => ringLeaves.has(leaf));
+  // A note the wallet paid itself gets no history row, so its leaf names the
+  // transaction that made it.
+  const authored = new Map<bigint, PrivateTransaction>();
+  for (const row of rows) {
+    for (const leaf of slots.get(row.id.signature)?.leaves.values() ?? []) authored.set(leaf, row);
+  }
+  const ownNotes = new Map<string, number>();
+  for (const entry of synced.wallet.utxos()) {
+    if (entry.utxo.zoneProgramId !== ring) continue;
+    const row = authored.get(entry.outputContext.leafIndex);
+    if (row) ownNotes.set(row.id.signature, (ownNotes.get(row.id.signature) ?? 0) + 1);
+  }
+  // A self-payment keeps two notes and shows no foreign tag, where a send or a
+  // withdrawal keeps only its change.
+  const selfPaid = (signature: string) =>
+    other(signature) === undefined && (ownNotes.get(signature) ?? 0) > 1;
 
   const received = new Map<string, ShownTransaction>();
   for (const entry of synced.wallet.utxos()) {
     if (entry.utxo.zoneProgramId !== ring) continue;
     const leaf = entry.outputContext.leafIndex;
-    const row = byLeaf.get(leaf);
+    const historic = byLeaf.get(leaf);
+    const row = historic ?? authored.get(leaf);
     if (!row) continue;
+    if (!historic && !selfPaid(row.id.signature)) continue;
     // A deposit is the wallet paying itself in, so it has no counterparty.
-    const sender = row.kind === "deposit" ? undefined : other(row.id.signature);
+    const sender = row.kind === "deposit" ? undefined : historic ? other(row.id.signature) : wallet;
     append(
       received,
       row,
@@ -125,7 +143,10 @@ export function participantViews(
     if (row.direction !== "outbound") continue;
     if (!onRing(row.id.signature)) continue;
     const exit = row.kind === "publicWithdrawal";
-    const recipient = exit ? withdrawnTo.get(row.id.signature) : other(row.id.signature);
+    // Every tag of a self-payment is the wallet's own, so no counterparty shows.
+    const recipient = exit
+      ? withdrawnTo.get(row.id.signature)
+      : (other(row.id.signature) ?? wallet);
     append(
       sent,
       row,
