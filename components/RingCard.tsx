@@ -180,7 +180,7 @@ function RingState({ status }: { status: RingStatus }) {
       return (
         <div className="flex flex-col gap-1">
           <Badge>no config yet</Badge>
-          <Hint>The ring has no config on chain. `just init` pins this service&apos;s key.</Hint>
+          <Hint>The ring has no config on chain. `zolana-ring init` pins this service&apos;s key.</Hint>
         </div>
       );
     case "foreignAuditor":
