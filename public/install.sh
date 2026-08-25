@@ -93,7 +93,9 @@ else
 	fi
 	if [ -z "$version" ]; then
 		version="$DEFAULT_VERSION"
-		printf 'The release list is unavailable, falling back.\n' >&2
+		printf '%s\n' "The release list is unreachable, often the GitHub API allowance of 60 an hour per address." >&2
+		printf '%s\n' "Using the pinned $version, which can be older than the newest release." >&2
+		printf '%s\n' "Set ZOLANA_RING_VERSION to a tag, or GITHUB_TOKEN to raise the allowance." >&2
 	fi
 	printf 'Version %s\n' "$version"
 fi
