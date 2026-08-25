@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { isAddress } from "@solana/kit";
-import { RING_RPC_URL, type Ring } from "@/lib/config";
+import { INSTALL_URL, RING_RPC_URL, type Ring } from "@/lib/config";
 import { Button, Code, Field, Hint, Modal } from "./ui";
 
 /** `zolana-ring` ships as a release binary, the ring directory it writes holds ring.toml and the keys. */
 const STEPS: readonly { readonly text?: string; readonly code: string }[] = [
   {
     text: "Install the ring operator CLI.",
-    code: 'TAG=v0.1.0-alpha.2\nARCH=$([ "$(uname)" = Darwin ] && echo darwin-arm64 || echo linux-x64)\ncurl -fsSL "https://github.com/helius-labs/zolana/releases/download/$TAG/zolana-ring-$ARCH-$TAG" -o /usr/local/bin/zolana-ring\nchmod +x /usr/local/bin/zolana-ring',
+    code: `curl -fsSL ${INSTALL_URL} | sh`,
   },
   {
     text: "Deploying the ring program needs the Anza CLI on PATH.",
