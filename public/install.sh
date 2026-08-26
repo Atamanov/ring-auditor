@@ -2,15 +2,28 @@
 set -eu
 
 REPO="helius-labs/zolana"
-BIN="zolana-ring"
+BINS="zolana-ring zolana"
 API="https://api.github.com/repos/$REPO/releases?per_page=100"
-# The API allows 60 calls an hour per address, so a shared network falls back to this.
-DEFAULT_VERSION="v0.1.0-alpha.2"
 BIN_DIR="${ZOLANA_RING_BIN_DIR:-$HOME/.local/bin}"
 
 die() {
 	printf '%s\n' "$*" >&2
 	exit 1
+}
+
+# The two CLIs ship under separate tags, so each one resolves and pins on its own.
+pinned_version() {
+	case "$1" in
+	zolana-ring) printf 'v0.1.0-alpha.2\n' ;;
+	zolana) printf 'v0.1.0-alpha\n' ;;
+	esac
+}
+
+wanted_version() {
+	case "$1" in
+	zolana-ring) printf '%s\n' "${ZOLANA_RING_VERSION:-}" ;;
+	zolana) printf '%s\n' "${ZOLANA_VERSION:-}" ;;
+	esac
 }
 
 if command -v curl >/dev/null 2>&1; then
@@ -53,11 +66,12 @@ Linux\ x86_64) platform="linux-x64" ;;
 *)
 	die "$(
 		cat <<EOF
-No prebuilt $BIN for $os $arch.
+No prebuilt zolana-ring or zolana for $os $arch.
 The releases give darwin-arm64 (Apple silicon) and linux-x64 (Intel or AMD 64-bit) only.
-Build it from source instead:
+Build them from source instead:
   cargo install --git https://github.com/$REPO custom-ring-cli
-The crate is custom-ring-cli and the binary it makes is $BIN.
+  cargo install --git https://github.com/$REPO zolana-cli
+The crate custom-ring-cli makes zolana-ring, the crate zolana-cli makes zolana.
 EOF
 	)"
 	;;
@@ -66,53 +80,75 @@ printf 'Platform %s\n' "$platform"
 
 tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t zolana-ring)"
 mkdir -p "$BIN_DIR" || die "Cannot make the install directory $BIN_DIR."
-# The staged file shares a filesystem with the target, so the mv is a rename.
-tmp_bin="$BIN_DIR/.$BIN.$$"
-trap 'rm -rf "$tmp_dir" "$tmp_bin"' EXIT INT TERM
+tmp_bin=""
+trap 'rm -rf "$tmp_dir"; [ -z "$tmp_bin" ] || rm -f "$tmp_bin"' EXIT INT TERM
 
-version="${ZOLANA_RING_VERSION:-}"
-if [ -n "$version" ]; then
-	printf 'Version %s (from ZOLANA_RING_VERSION)\n' "$version"
-else
+need_list=""
+for b in $BINS; do
+	[ -n "$(wanted_version "$b")" ] || need_list="1"
+done
+if [ -n "$need_list" ]; then
+	# One JSON field per line, so a tag_name always comes before the assets of its own release.
 	if fetch_api "$API" "$tmp_dir/releases.json"; then
-		# One JSON field per line, so a tag_name always comes before the assets of its own release.
 		tr -d ' \t' <"$tmp_dir/releases.json" | tr ',{}[]' '\n\n\n\n\n' >"$tmp_dir/fields"
-		tag=""
-		while IFS= read -r line; do
-			case "$line" in
-			'"tag_name":"'*)
-				tag="${line#\"tag_name\":\"}"
-				tag="${tag%\"}"
-				;;
-			'"name":"'"$BIN-$platform"-*)
-				version="$tag"
-				break
-				;;
-			esac
-		done <"$tmp_dir/fields"
-	fi
-	if [ -z "$version" ]; then
-		version="$DEFAULT_VERSION"
+	else
 		printf '%s\n' "The release list is unreachable, often the GitHub API allowance of 60 an hour per address." >&2
-		printf '%s\n' "Using the pinned $version, which can be older than the newest release." >&2
-		printf '%s\n' "Set ZOLANA_RING_VERSION to a tag, or GITHUB_TOKEN to raise the allowance." >&2
+		printf '%s\n' "Set ZOLANA_RING_VERSION or ZOLANA_VERSION to a tag, or GITHUB_TOKEN to raise the allowance." >&2
 	fi
-	printf 'Version %s\n' "$version"
 fi
 
-asset="$BIN-$platform-$version"
-url="https://github.com/$REPO/releases/download/$version/$asset"
-printf 'Download %s\n' "$url"
-fetch "$url" "$tmp_bin" || die "Cannot download $asset. Check that the release $version has this asset."
-chmod +x "$tmp_bin"
-"$tmp_bin" --version >/dev/null 2>&1 || "$tmp_bin" --help >/dev/null 2>&1 ||
-	die "The downloaded $asset does not run on this machine. Nothing was installed."
-mv -f "$tmp_bin" "$BIN_DIR/$BIN"
-printf 'Installed %s\n' "$BIN_DIR/$BIN"
+# The newest release that carries an asset for this binary and platform wins.
+resolve_version() {
+	[ -s "$tmp_dir/fields" ] || return 0
+	tag=""
+	while IFS= read -r line; do
+		case "$line" in
+		'"tag_name":"'*)
+			tag="${line#\"tag_name\":\"}"
+			tag="${tag%\"}"
+			;;
+		'"name":"'"$1-$platform"-*)
+			printf '%s\n' "$tag"
+			return 0
+			;;
+		esac
+	done <"$tmp_dir/fields"
+}
+
+install_binary() {
+	bin="$1"
+	version="$(wanted_version "$bin")"
+	if [ -n "$version" ]; then
+		printf '%s %s (from the environment)\n' "$bin" "$version"
+	else
+		version="$(resolve_version "$bin")"
+		if [ -z "$version" ]; then
+			version="$(pinned_version "$bin")"
+			printf '%s\n' "Using the pinned $version for $bin, which can be older than the newest release." >&2
+		fi
+		printf '%s %s\n' "$bin" "$version"
+	fi
+
+	asset="$bin-$platform-$version"
+	printf '  https://github.com/%s/releases/download/%s/%s\n' "$REPO" "$version" "$asset"
+	tmp_bin="$BIN_DIR/.$bin.$$"
+	fetch "https://github.com/$REPO/releases/download/$version/$asset" "$tmp_bin" ||
+		die "Cannot download $asset. Check that the release $version has this asset."
+	chmod +x "$tmp_bin"
+	"$tmp_bin" --version >/dev/null 2>&1 || "$tmp_bin" --help >/dev/null 2>&1 ||
+		die "The downloaded $asset does not run on this machine. $bin was not installed."
+	mv -f "$tmp_bin" "$BIN_DIR/$bin"
+	tmp_bin=""
+	printf '  installed %s\n' "$BIN_DIR/$bin"
+}
+
+for b in $BINS; do
+	install_binary "$b"
+done
 
 case ":$PATH:" in
 *":$BIN_DIR:"*)
-	printf '%s is on your PATH. Run %s --help to start.\n' "$BIN_DIR" "$BIN"
+	printf '%s is on your PATH. Run zolana-ring --help to start.\n' "$BIN_DIR"
 	exit 0
 	;;
 esac

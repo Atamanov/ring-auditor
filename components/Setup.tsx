@@ -6,10 +6,10 @@ import { isAddress } from "@solana/kit";
 import { INSTALL_URL, RING_RPC_URL, type Ring } from "@/lib/config";
 import { Button, Code, Field, Hint, Modal } from "./ui";
 
-/** `zolana-ring` ships as a release binary, the ring directory it writes holds ring.toml and the keys. */
+/** The installer puts `zolana-ring` and `zolana` on PATH, the ring directory holds ring.toml and the keys. */
 const STEPS: readonly { readonly text?: string; readonly code: string }[] = [
   {
-    text: "Install the ring operator CLI.",
+    text: "Install the ring operator CLI and the zolana CLI.",
     code: `curl -fsSL ${INSTALL_URL} | sh`,
   },
   {
