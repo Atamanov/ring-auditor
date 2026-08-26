@@ -4,6 +4,7 @@ set -eu
 REPO="helius-labs/zolana"
 BINS="zolana-ring zolana"
 API="https://api.github.com/repos/$REPO/releases?per_page=100"
+ATOM="https://github.com/$REPO/releases.atom"
 BIN_DIR="${ZOLANA_RING_BIN_DIR:-$HOME/.local/bin}"
 
 die() {
@@ -58,6 +59,14 @@ fetch_api() {
 	fi
 }
 
+head_ok() {
+	if [ "$DOWNLOADER" = "curl" ]; then
+		curl -fsIL -o /dev/null "$1" 2>/dev/null
+	else
+		wget -q --spider "$1" 2>/dev/null
+	fi
+}
+
 os="$(uname -s)"
 arch="$(uname -m)"
 case "$os $arch" in
@@ -92,47 +101,79 @@ if [ -n "$need_list" ]; then
 	if fetch_api "$API" "$tmp_dir/releases.json"; then
 		tr -d ' \t' <"$tmp_dir/releases.json" | tr ',{}[]' '\n\n\n\n\n' >"$tmp_dir/fields"
 	else
-		printf '%s\n' "The release list is unreachable, often the GitHub API allowance of 60 an hour per address." >&2
-		printf '%s\n' "Set ZOLANA_RING_VERSION or ZOLANA_VERSION to a tag, or GITHUB_TOKEN to raise the allowance." >&2
+		# The feed carries every tag newest first and spends no API allowance.
+		fetch "$ATOM" "$tmp_dir/atom" 2>/dev/null || true
+		if [ -s "$tmp_dir/atom" ]; then
+			sed -n 's|.*/releases/tag/\([^"]*\)".*|\1|p' "$tmp_dir/atom" | head -25 >"$tmp_dir/tags"
+			printf '%s\n' "The GitHub API is unreachable, reading the release feed instead." >&2
+		else
+			printf '%s\n' "The release list is unreachable, often the GitHub API allowance of 60 an hour per address." >&2
+			printf '%s\n' "Set ZOLANA_RING_VERSION or ZOLANA_VERSION to a tag, or GITHUB_TOKEN to raise the allowance." >&2
+		fi
 	fi
 fi
 
 # The newest release that carries an asset for this binary and platform wins.
-resolve_version() {
+# The download URL comes from the asset itself, so an asset name may differ from its tag.
+resolve_from_api() {
 	[ -s "$tmp_dir/fields" ] || return 0
 	tag=""
+	hit=""
 	while IFS= read -r line; do
 		case "$line" in
 		'"tag_name":"'*)
 			tag="${line#\"tag_name\":\"}"
 			tag="${tag%\"}"
 			;;
-		'"name":"'"$1-$platform"-*)
-			printf '%s\n' "$tag"
+		'"name":"'"$1-$platform"-*) hit="1" ;;
+		'"browser_download_url":"'*)
+			[ -n "$hit" ] || continue
+			line="${line#\"browser_download_url\":\"}"
+			printf '%s %s\n' "$tag" "${line%\"}"
 			return 0
 			;;
 		esac
 	done <"$tmp_dir/fields"
 }
 
+# Without the API the feed gives the tags, a HEAD probe says which one holds the asset.
+resolve_from_feed() {
+	[ -s "$tmp_dir/tags" ] || return 0
+	while IFS= read -r tag; do
+		[ -n "$tag" ] || continue
+		url="https://github.com/$REPO/releases/download/$tag/$1-$platform-$tag"
+		if head_ok "$url"; then
+			printf '%s %s\n' "$tag" "$url"
+			return 0
+		fi
+	done <"$tmp_dir/tags"
+}
+
 install_binary() {
 	bin="$1"
+	found=""
 	version="$(wanted_version "$bin")"
 	if [ -n "$version" ]; then
 		printf '%s %s (from the environment)\n' "$bin" "$version"
+		url="https://github.com/$REPO/releases/download/$version/$bin-$platform-$version"
 	else
-		version="$(resolve_version "$bin")"
-		if [ -z "$version" ]; then
+		found="$(resolve_from_api "$bin")"
+		[ -n "$found" ] || found="$(resolve_from_feed "$bin")"
+		if [ -n "$found" ]; then
+			version="${found%% *}"
+			url="${found#* }"
+		else
 			version="$(pinned_version "$bin")"
+			url="https://github.com/$REPO/releases/download/$version/$bin-$platform-$version"
 			printf '%s\n' "Using the pinned $version for $bin, which can be older than the newest release." >&2
 		fi
 		printf '%s %s\n' "$bin" "$version"
 	fi
 
-	asset="$bin-$platform-$version"
-	printf '  https://github.com/%s/releases/download/%s/%s\n' "$REPO" "$version" "$asset"
+	asset="${url##*/}"
+	printf '  %s\n' "$url"
 	tmp_bin="$BIN_DIR/.$bin.$$"
-	fetch "https://github.com/$REPO/releases/download/$version/$asset" "$tmp_bin" ||
+	fetch "$url" "$tmp_bin" ||
 		die "Cannot download $asset. Check that the release $version has this asset."
 	chmod +x "$tmp_bin"
 	"$tmp_bin" --version >/dev/null 2>&1 || "$tmp_bin" --help >/dev/null 2>&1 ||
