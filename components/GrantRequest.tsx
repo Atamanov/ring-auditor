@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRight, PaperPlaneTilt } from "@phosphor-icons/react";
 import { useState } from "react";
 import { Copyable, Hint, Modal } from "./ui";
 
@@ -11,10 +12,10 @@ export function GrantRequest({ label, readerKey }: { label: string; readerKey: s
         type="button"
         onClick={() => setOpen(true)}
         title="Request a grant from the ring operator"
-        aria-label="Request a grant from the ring operator"
-        className="rounded-full border border-line px-2 py-0.5 text-xs text-muted hover:text-text"
+        className="glow-accent inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-ground px-2.5 py-1 text-xs text-accent transition-colors hover:border-accent hover:bg-accent hover:text-white"
       >
-        ✉
+        <PaperPlaneTilt size={13} />
+        Request grant
       </button>
       {open && (
         <Modal title={`Grant for ${label}`} onClose={() => setOpen(false)}>
@@ -25,11 +26,12 @@ export function GrantRequest({ label, readerKey }: { label: string; readerKey: s
           <Copyable label="Reader key" value={readerKey} />
           <Copyable
             label="What the operator runs in the ring repository"
-            value={`just grant-reader ${readerKey}`}
+            value={`zolana-ring reader grant ${readerKey}`}
           />
           <Hint>
             An operator with the authority wallet can also open this page and grant the key from the
-            Passkeys card. Once granted, Ring auditor → Sign and read.
+            Passkeys card. Once granted, Ring auditor <ArrowRight size={12} className="inline align-[-1px]" />{" "}
+            Sign and read.
           </Hint>
         </Modal>
       )}
