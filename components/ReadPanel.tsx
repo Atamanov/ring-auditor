@@ -21,7 +21,7 @@ import { walletSigner } from "@/lib/signers";
 import type { ShownTransaction } from "@/lib/transactions";
 import { GrantRequest } from "./GrantRequest";
 import { TransactionList } from "./TransactionList";
-import { Badge, Button, Card, Field, Hint, Select, Success } from "./ui";
+import { Badge, Button, Card, Field, Hint, Pills, Select, Success } from "./ui";
 
 type Mode = "auditor" | "participant";
 
@@ -137,21 +137,11 @@ export function ReadPanel({
   return (
     <>
       <Card title="Read as">
-        <div className="flex flex-wrap gap-2">
-          {MODE_ORDER.map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMode(id)}
-              aria-pressed={id === mode}
-              className={`rounded-full border px-3 py-1 text-sm ${
-                id === mode ? "border-accent bg-accent-ground text-text" : "border-line text-muted hover:text-text"
-              }`}
-            >
-              {MODES[id].label}
-            </button>
-          ))}
-        </div>
+        <Pills
+          options={MODE_ORDER.map((id) => ({ id, label: MODES[id].label }))}
+          value={mode}
+          onChange={setMode}
+        />
         <Hint>{hint}</Hint>
         {mode === "auditor" && passkeys.length > 0 && (
           <Select

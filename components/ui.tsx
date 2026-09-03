@@ -68,6 +68,34 @@ export function IconButton({
   );
 }
 
+export function Pills<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { readonly id: T; readonly label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          aria-pressed={id === value}
+          className={`rounded-full border px-3 py-1 text-sm ${
+            id === value ? "border-accent bg-accent-ground text-text" : "border-line text-muted hover:text-text"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Mono({ children }: { children: ReactNode }) {
   return <span className="break-all font-mono text-xs">{children}</span>;
 }

@@ -98,5 +98,27 @@ The request layout and the signed attestation are documented on
 against the Rust server by the SDK's tests. The page signs again for every
 request because the cursor and the time are both part of the signature.
 
-The SDK is consumed as a `link:` dependency on the `zolana-ts-rings` checkout next to
-this repository, `build:ts` there refreshes it.
+The SDK is consumed as a `link:` dependency on the zolana worktree `package.json` names,
+branch `alex/policy-v3`, `npm run build` in its `sdk-libs/ts` refreshes it. The container
+build installs the SDK from a pinned commit and cannot follow the link.
+
+## Policies
+
+The Policies tab reads a policy ring's `PolicyConfig` account from the Solana RPC and
+shows what `zolana-ring policy show` prints, the entries tree, the generation with its
+slot, the policy hash, one line per rule and the namespace each referenced list reads
+from, the ring's own or a curator's. An audit-only ring shows no policy.
+
+**Read entries** lists the live entries of every referenced list from the indexer. The
+owner tag on an entry output is not authenticated, so the page only takes the tag scan
+as a list of candidate pairs and then walks each lineage as the Rust reader does, from
+the pair's address through every spender, and keeps the version nobody spent. Every
+candidate advances one version per indexer round, a list with long lineages takes more
+rounds.
+
+A member is shown as its field element. The **Lookup** card goes the other way, it takes
+the base58 owner tag or mint `zolana-ring list show` takes and answers active, cleared or
+unclaimed for each referenced list.
+
+Transfer and Burn refuse a ring whose table holds rules, the SDK proves the empty table
+only.
