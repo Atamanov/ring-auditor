@@ -16,7 +16,7 @@ export function participantViews(synced: Synced, ring: Address, wallet: Address)
   );
   const received = new Map<string, ShownTransaction>();
   for (const entry of synced.wallet.utxos()) {
-    if (entry.utxo.zoneProgramId !== ring) continue;
+    if (entry.utxo.ringProgramId !== ring) continue;
     const leaf = entry.outputContext.leafIndex;
     const row = byLeaf.get(leaf);
     if (!row) continue;

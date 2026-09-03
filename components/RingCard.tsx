@@ -4,8 +4,8 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { isAddress, type Address } from "@solana/kit";
-import { RingRpc } from "@heliuslabs/zolana/ring";
 import { walletAddress } from "@/lib/chain";
+import { ringRpc } from "@/lib/client";
 import {
   RING_RPC_URL,
   SOLANA_RPC_URL,
@@ -18,7 +18,6 @@ import {
 import { encodeShieldedAddress, parseRecipient, type Recipient } from "@/lib/address";
 import { formatAmount, parseSol, shortKey } from "@/lib/format";
 import { useAction, useLoaded } from "@/lib/hooks";
-import { servesRing } from "@/lib/role";
 import { useShielded } from "@/lib/shielded";
 import { Badge, Button, Caption, Card, Field, Hint, IconButton, Key, Modal, Mono, Select } from "./ui";
 
@@ -132,11 +131,14 @@ function AddRing({ onAdd }: { onAdd: (ring: Ring) => void }) {
 
 function RingHealth({ ring, rpcUrl }: { ring: Address; rpcUrl: string }) {
   const health = useLoaded({ ring, rpcUrl }, async ({ ring, rpcUrl }) => {
-    const status = await new RingRpc(rpcUrl).health().catch(() => {
+    const rpc = ringRpc(rpcUrl);
+    const status = await rpc.health().catch(() => {
       throw new Error(`no ring RPC answering at ${rpcUrl}`);
     });
-    const ok = await servesRing(ring, status).catch(() => true);
-    if (!ok) throw new Error(`the RPC at ${rpcUrl} serves another ring's auditor key`);
+    const served = await rpc.ringStatus(ring).catch(() => undefined);
+    if (served?.state === "foreignAuditor") {
+      throw new Error(`the RPC at ${rpcUrl} serves another ring's auditor key`);
+    }
     return status;
   });
   switch (health.status) {

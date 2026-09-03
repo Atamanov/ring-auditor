@@ -3,13 +3,7 @@
 import { useWallet, type WalletContextState } from "@solana/wallet-adapter-react";
 import { isAddress, type Address } from "@solana/kit";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  LocalWalletAuthority,
-  SOL_MINT,
-  Wallet,
-  createZolanaClient,
-  syncWallet,
-} from "@heliuslabs/zolana";
+import { KeypairWalletAuthority, SOL_MINT, Wallet, syncWallet } from "@heliuslabs/zolana";
 import {
   ShieldedAddress,
   ShieldedKeypair,
@@ -18,16 +12,16 @@ import {
   type Bytes32,
 } from "@heliuslabs/zolana/keypair";
 import {
+  RingError,
   buildRingDepositTransaction,
   buildRingLookupTableTransaction,
   buildRingTransferTransaction,
 } from "@heliuslabs/zolana/ring";
 import { connectedAddress, sendTransaction, walletAddress } from "./chain";
-import { INDEXER_URL, PROVER_URL, SOLANA_RPC_URL, TREE, type Ring } from "./config";
+import { zolanaClient, type ZolanaClient } from "./client";
+import type { Ring } from "./config";
 import type { Recipient } from "./address";
 import { stored } from "./storage";
-
-type ZolanaClient = Awaited<ReturnType<typeof createZolanaClient>>;
 
 /** The wallet's notes and history as of `slot`, after a full sync. */
 export interface Synced {
@@ -51,7 +45,7 @@ export interface Shielded {
 
 interface Session {
   readonly wallet: Address;
-  readonly authority: LocalWalletAuthority;
+  readonly authority: KeypairWalletAuthority;
   readonly address: ShieldedAddress;
   readonly balance?: bigint;
 }
@@ -59,7 +53,7 @@ interface Session {
 /** Ref state, read before React re-renders. */
 interface Derived {
   readonly wallet: Address;
-  readonly authority: LocalWalletAuthority;
+  readonly authority: KeypairWalletAuthority;
   shielded?: Wallet;
 }
 
@@ -76,19 +70,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
   const address = walletAddress(wallet);
   const [session, setSession] = useState<Session>();
   const current = session?.wallet === address ? session : undefined;
-  const clientRef = useRef<Promise<ZolanaClient>>(undefined);
   const derivedRef = useRef<Derived>(undefined);
-
-  const client = useCallback(() => {
-    clientRef.current ??= createZolanaClient({
-      solanaRpcUrl: SOLANA_RPC_URL,
-      indexerUrl: INDEXER_URL,
-      proverUrl: PROVER_URL,
-      tree: TREE,
-      allowInsecureHttp: true,
-    });
-    return clientRef.current;
-  }, []);
 
   const derived = useCallback(async (): Promise<Derived> => {
     const owner = connectedAddress(wallet);
@@ -96,15 +78,15 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
     const { signMessage } = wallet;
     if (!signMessage) throw new Error("the wallet cannot sign messages");
     // Poseidon must be loaded before derivation.
-    await client();
-    const authority = LocalWalletAuthority.fromDerivationSeed({
+    await zolanaClient();
+    const authority = KeypairWalletAuthority.fromDerivationSeed({
       solanaPublicKey: owner,
       derivationSeed: await signMessage(ed25519DerivationPayload()),
     });
     derivedRef.current = { wallet: owner, authority };
     setSession({ wallet: owner, authority, address: await authority.shieldedAddress() });
     return derivedRef.current;
-  }, [client, wallet]);
+  }, [wallet]);
 
   const shieldedWallet = useCallback(async () => {
     const d = await derived();
@@ -114,18 +96,18 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
 
   const sync = useCallback(async (): Promise<Synced> => {
     const { authority, shielded } = await shieldedWallet();
-    const c = await client();
+    const c = await zolanaClient();
     const slot = BigInt(await c.solanaRpc.getSlot().send());
     await syncWallet({ client: c, wallet: shielded, authority, config: { requireSlot: slot } });
     return { wallet: shielded, slot, viewingPublicKey: shielded.identity.viewingPublicKey.toBytes() };
-  }, [client, shieldedWallet]);
+  }, [shieldedWallet]);
 
   const refresh = useCallback(
     async (ring: Address) => {
       const { wallet: shielded } = await sync();
       const total = shielded
         .utxos()
-        .filter((e) => !e.spent && e.utxo.asset === SOL_MINT && e.utxo.zoneProgramId === ring)
+        .filter((e) => !e.spent && e.utxo.asset === SOL_MINT && e.utxo.ringProgramId === ring)
         .reduce((sum, e) => sum + e.utxo.amount, 0n);
       setSession((prev) => (prev && prev.wallet === address ? { ...prev, balance: total } : prev));
       return total;
@@ -139,7 +121,7 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
       const signature = await sendTransaction(
         wallet,
         await buildRingDepositTransaction({
-          client: await client(),
+          client: await zolanaClient(),
           ringProgramId: ring,
           feePayer: owner,
           recipient: await authority.shieldedAddress(),
@@ -149,17 +131,16 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
       await refresh(ring);
       return signature;
     },
-    [client, refresh, shieldedWallet, wallet],
+    [refresh, shieldedWallet, wallet],
   );
 
   const transfer = useCallback(
     async (ring: Ring, lamports: bigint, recipient: Recipient) => {
       const { authority, shielded, owner } = await shieldedWallet();
-      const c = await client();
+      const c = await zolanaClient();
       await refresh(ring.id);
-      const signature = await sendTransaction(
-        wallet,
-        await buildRingTransferTransaction({
+      const build = async () =>
+        buildRingTransferTransaction({
           client: c,
           ringProgramId: ring.id,
           wallet: shielded,
@@ -168,12 +149,18 @@ export function ShieldedProvider({ children }: { children: ReactNode }) {
           recipient,
           amount: lamports,
           lookupTable: await lookupTable(c, ring, wallet),
-        }),
-      );
+        });
+      const transaction = await build().catch(async (e: unknown) => {
+        // A table created before the ring's tier or trees changed lacks accounts.
+        if (!isIncompleteTable(e) || ring.lookupTable) throw e;
+        createdTable(ring.id).clear();
+        return build();
+      });
+      const signature = await sendTransaction(wallet, transaction);
       await refresh(ring.id);
       return signature;
     },
-    [client, refresh, shieldedWallet, wallet],
+    [refresh, shieldedWallet, wallet],
   );
 
   const burn = useCallback(
@@ -200,6 +187,10 @@ function freshRecipient(): ShieldedAddress {
   const seed = new Uint8Array(32);
   crypto.getRandomValues(seed);
   return ShieldedKeypair.fromKeypair(SigningKey.fromEd25519Bytes(seed as Bytes32)).shieldedAddress();
+}
+
+function isIncompleteTable(e: unknown): boolean {
+  return e instanceof RingError && e.code === "RING_LOOKUP_TABLE_INCOMPLETE";
 }
 
 const createdTable = (ring: Address) =>

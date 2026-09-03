@@ -4,15 +4,16 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import type { Address } from "@solana/kit";
 import {
-  RING_READER_COMPUTE_UNIT_LIMIT,
-  grantReaderInstruction,
+  RING_READ_ACCESS_COMPUTE_UNIT_LIMIT,
+  grantReadAccessInstruction,
   parseReaderKey,
-  revokeReaderInstruction,
+  revokeReadAccessInstruction,
+  type RingRole,
 } from "@heliuslabs/zolana/ring";
 import { sendInstruction, walletAddress } from "@/lib/chain";
 import { useAction, useLoaded, useRefreshToken } from "@/lib/hooks";
 import { registerPasskey, type StoredPasskey } from "@/lib/passkeys";
-import { ringRole, type RingRole } from "@/lib/role";
+import { ringRole } from "@/lib/role";
 import { GrantRequest } from "./GrantRequest";
 import { Badge, Button, Card, Field, Hint, IconButton, Key } from "./ui";
 
@@ -36,7 +37,7 @@ export function Passkeys({
     ring && { ring, token, keys: passkeys.map((p) => p.publicKey) },
     async ({ ring, keys }) =>
       new Map(
-        await Promise.all(keys.map(async (key) => [key, await ringRole(ring, parseReaderKey(key))] as const)),
+        await Promise.all(keys.map(async (key) => [key, await ringRole(ring, key)] as const)),
       ),
   );
   const walletRole = useLoaded(ring && authority && { ring, token, authority }, ({ ring, authority }) =>
@@ -58,14 +59,14 @@ export function Passkeys({
       if (!ring || !authority) throw new Error("connect the authority wallet first");
       const reader = parseReaderKey(readerText);
       const instruction = revoke
-        ? await revokeReaderInstruction({
+        ? await revokeReadAccessInstruction({
             ringProgramId: ring,
             authority,
             reader,
             rentRecipient: authority,
           })
-        : await grantReaderInstruction({ ringProgramId: ring, payer: authority, authority, reader });
-      await sendInstruction(wallet, instruction, RING_READER_COMPUTE_UNIT_LIMIT);
+        : await grantReadAccessInstruction({ ringProgramId: ring, payer: authority, authority, reader });
+      await sendInstruction(wallet, instruction, RING_READ_ACCESS_COMPUTE_UNIT_LIMIT);
       setPasted("");
       reload();
     });

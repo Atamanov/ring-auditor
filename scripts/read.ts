@@ -22,7 +22,7 @@ if (!values.ring || !values.keypair) {
 }
 
 const signer = keypairSigner(values.keypair);
-const rpc = new RingRpc(values.url);
+const rpc = new RingRpc(values.url, { allowInsecureHttp: true });
 const limit = values.limit ? BigInt(values.limit) : undefined;
 
 let cursor: Uint8Array | undefined;

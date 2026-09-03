@@ -6,6 +6,7 @@ export function asRecord(value: unknown): Record<string, unknown> {
 export interface Stored<T> {
   readonly load: () => T;
   readonly save: (value: T) => void;
+  readonly clear: () => void;
 }
 
 export function stored<T>(key: string, parse: (raw: unknown) => T): Stored<T> {
@@ -18,5 +19,6 @@ export function stored<T>(key: string, parse: (raw: unknown) => T): Stored<T> {
       }
     },
     save: (value) => localStorage.setItem(key, JSON.stringify(value)),
+    clear: () => localStorage.removeItem(key),
   };
 }
