@@ -96,7 +96,9 @@ function Pinned({ view }: { view: PolicyRing }) {
 function Line({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-muted">{label}</span>
+      <span className="w-28 shrink-0">
+        <Caption>{label}</Caption>
+      </span>
       <span className="break-all">{children}</span>
     </div>
   );
@@ -119,20 +121,19 @@ function Lists({ ring, view }: { ring: Address; view: PolicyRing }) {
         </Button>
         {lists.status === "failed" && <Badge>{lists.error}</Badge>}
         {!readable && <Badge>no list has a source</Badge>}
+        {lists.status === "ready" && (
+          <div className="min-w-64 grow">
+            <Field
+              label="Search member or signature"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="…"
+            />
+          </div>
+        )}
       </div>
-      {lists.status === "ready" && (
-        <>
-          <Field
-            label="Search member or signature"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="…"
-          />
-          {lists.value.map((list) => (
-            <ListTable key={list.listId} list={list} query={query} />
-          ))}
-        </>
-      )}
+      {lists.status === "ready" &&
+        lists.value.map((list) => <ListTable key={list.listId} list={list} query={query} />)}
     </Card>
   );
 }
@@ -155,10 +156,10 @@ function ListTable({ list, query }: { list: ListEntries; query: string }) {
         <table className="w-full text-xs">
           <thead className="text-left text-muted">
             <tr>
-              <th className="font-normal">member</th>
-              <th className="font-normal">state</th>
-              <th className="text-right font-normal">version</th>
-              <th className="font-normal">written by</th>
+              <th className="pr-4 pb-1 font-normal">member</th>
+              <th className="pr-4 pb-1 font-normal">state</th>
+              <th className="pr-4 pb-1 text-right font-normal">version</th>
+              <th className="pb-1 font-normal">written by</th>
             </tr>
           </thead>
           <tbody>
@@ -175,14 +176,14 @@ function ListTable({ list, query }: { list: ListEntries; query: string }) {
 function EntryRow({ live }: { live: LiveEntry }) {
   return (
     <tr className="border-t border-line">
-      <td className="py-1">
+      <td className="py-1.5 pr-4">
         <Key value={toHex(live.entry.member)} head={8} tail={8} />
       </td>
-      <td className="py-1">
+      <td className="py-1.5 pr-4">
         <Badge>{live.entry.state}</Badge>
       </td>
-      <td className="py-1 text-right tabular-nums">{live.entry.version.toString()}</td>
-      <td className="py-1">
+      <td className="py-1.5 pr-4 text-right tabular-nums">{live.entry.version.toString()}</td>
+      <td className="py-1.5 whitespace-nowrap">
         <a
           href={explorerTxUrl(live.txSignature)}
           target="_blank"
