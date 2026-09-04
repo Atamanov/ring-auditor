@@ -10,8 +10,6 @@ const hasher = hasherEntry.slice(0, hasherEntry.indexOf(`${path.sep}dist${path.s
 const nextConfig: NextConfig = {
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   turbopack: {
-    // The linked SDK lives beside this repository.
-    root: path.resolve(__dirname, ".."),
     // The hasher's browser build inlines its WASM but keeps a `new URL(..)`
     // fallback the bundler resolves against the wrong directory.
     resolveAlias: Object.fromEntries(

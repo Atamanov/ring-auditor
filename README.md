@@ -98,9 +98,8 @@ The request layout and the signed attestation are documented on
 against the Rust server by the SDK's tests. The page signs again for every
 request because the cursor and the time are both part of the signature.
 
-The SDK is consumed as a `link:` dependency on the zolana worktree `package.json` names,
-branch `alex/policy-v3`, `npm run build` in its `sdk-libs/ts` refreshes it. The container
-build installs the SDK from a pinned commit and cannot follow the link.
+The SDK is pinned to a zolana commit on branch `alex/policy-v3` in `package.json`,
+`pnpm install` builds it from that commit.
 
 ## Policies
 
