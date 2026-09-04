@@ -92,9 +92,18 @@ export function describeRule(rule: Rule): string {
           ...rule.source.present.map((id) => `must be on the ${listName(id)} list`),
           ...rule.source.absent.map((id) => `must not be on the ${listName(id)} list`),
         ].join(" or ");
-  const guard =
-    rule.guard.kind === "aboveAmount" ? ` when the amount is above ${rule.guard.amount}` : "";
-  return `${SUBJECTS[rule.subject]} ${condition}${guard}`;
+  return `${SUBJECTS[rule.subject]} ${condition}${guardSuffix(rule.guard)}`;
+}
+
+function guardSuffix(guard: Rule["guard"]): string {
+  switch (guard.kind) {
+    case "always":
+      return "";
+    case "aboveAmount":
+      return ` when the amount is above ${guard.amount}`;
+    case "aboveAmountByAsset":
+      return " when its per-asset amount is above the limit";
+  }
 }
 
 export function sourceLabel(source: ListSource): string {
