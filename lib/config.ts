@@ -1,4 +1,5 @@
 import { isAddress, type Address } from "@solana/kit";
+import { getTreeAddress } from "@heliuslabs/zolana/addresses";
 import { asRecord } from "./storage";
 
 // Service URLs are deployment settings, not page input. `.env.local` sets them.
@@ -6,8 +7,7 @@ export const RING_RPC_URL = process.env.NEXT_PUBLIC_RING_RPC_URL ?? "http://127.
 export const SOLANA_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "http://127.0.0.1:9599";
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://127.0.0.1:9484";
 export const PROVER_URL = process.env.NEXT_PUBLIC_PROVER_URL ?? "http://127.0.0.1:3701";
-export const TREE = (process.env.NEXT_PUBLIC_ZOLANA_TREE ??
-  "trEEbaNobcTESNmtsPBj3FX27q5sDCQePV2kb12FYho") as Address;
+export const TREE = (process.env.NEXT_PUBLIC_ZOLANA_TREE as Address | undefined) || getTreeAddress(0);
 
 export interface Ring {
   readonly name: string;
